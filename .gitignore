@@ -1,0 +1,53 @@
+# macOS / editor files
+.DS_Store
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Datasets and generated data
+data/
+datasets/
+dataset/
+
+# Medical imaging / array artifacts
+*.nii
+*.nii.gz
+*.mha
+*.mhd
+*.nrrd
+*.dcm
+*.npy
+*.npz
+
+# Training outputs, logs, and experiment trackers
+outputs/
+wandb/
+wandb2/
+lightning_logs/
+runs/
+logs/
+*.log
+*_log_.txt
+
+# Model checkpoints and weights
+*.ckpt
+*.pth
+*.pt
+*.onnx
+
+# Large generated notebooks / notebook checkpoints
+.ipynb_checkpoints/
+
+# Local secrets / environment config
+.env
+.env.*
