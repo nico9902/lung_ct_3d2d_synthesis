@@ -1,0 +1,2 @@
+"""SCPM-Net detector package."""
+

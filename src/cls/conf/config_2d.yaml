@@ -1,0 +1,26 @@
+defaults:
+  - model: backbone_2d
+  - data: slice
+  - trainer: default
+  - _self_
+
+seed: 42
+project_name: "lung_ct_3d2d_synthesis"
+stage: classify
+n_gpus: [0]
+
+exp:
+    name: "backbone_vgg16_slice_classification"
+    base_dir: "./outputs/${exp.name}"
+
+test_split: test  
+
+monitor:
+  metric: val/mean_auroc
+  mode: max
+
+hydra:
+  run:
+    dir: ./outputs/${exp.name}
+  job_logging:
+    disable_existing_loggers: true

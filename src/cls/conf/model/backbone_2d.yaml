@@ -1,0 +1,15 @@
+_target_: src.lightning_model.LungLitModel
+network_name: "BackboneClassifier2D"
+lr: 1e-3
+num_classes: 2
+feature_dim: 512
+backbone_name: "vgg16"
+freeze_half: false
+ckpt: null
+
+loss:
+    name: "BCEWithLogitsLoss"
+
+optimizer:
+    name: "AdamW"
+    eps: 1e-8

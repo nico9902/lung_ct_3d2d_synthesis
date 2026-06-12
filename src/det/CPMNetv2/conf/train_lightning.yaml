@@ -1,0 +1,75 @@
+csv_path: data/dataset_nodule_mean.csv
+images_dir: /ssd2/domenico/datasets/lidc_process
+annotations_dir: /ssd2/domenico/datasets/lidc_process
+labels_csv: /ssd2/domenico/datasets/lidc_process/lidc_labels.csv
+output_dir: outputs/cpmnetv2
+experiment_name: cpmnetv2
+use_wandb: true
+wandb_project: lung_ct_3d2d_synthesis
+wandb_name: null
+wandb_entity: null
+wandb_mode: online
+wandb_log_model: false
+
+view: axial
+checkpoint: null
+test_only: false
+no_froc: false
+froc_iou_threshold: 0.1
+checkpoint_monitor: val/loss
+checkpoint_mode: min
+checkpoint_filename: epoch={epoch:03d}-val_loss={val/loss:.4f}
+checkpoint_every_n_epochs: null
+checkpoint_start_epoch: 1
+
+seed: 233
+batch_size: 1
+num_workers: 0
+max_epochs: 300
+accelerator: auto
+devices: auto
+precision: "32"
+log_every_n_steps: 10
+val_check_interval: null
+check_val_every_n_epoch: 1
+val_froc_start_epoch: null
+val_froc_before_start_every_n_epoch: null
+accumulate_grad_batches: 1
+num_sanity_val_steps: 0
+
+lr: 0.01
+topk: 5
+num_samples: 1
+val_full_volume: false
+lambda_cls: 4.0
+lambda_offset: 1.0
+lambda_shape: 0.1
+lambda_iou: 1.0
+norm_type: batchnorm
+head_norm: batchnorm
+act_type: ReLU
+se: false
+post_threshold: 0.15
+confidence_log_interval: 50
+debug_target_stats: false
+debug_target_stats_interval: 50
+
+crop_size:
+  - 64
+  - 128
+  - 128
+overlap_size:
+  - 16
+  - 32
+  - 32
+spacing:
+  - 0.7
+  - 0.3125
+  - 0.3125
+min_component_voxels: 1
+
+hydra:
+  run:
+    dir: ${output_dir}/${experiment_name}/hydra/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false
