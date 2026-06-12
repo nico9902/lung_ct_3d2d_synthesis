@@ -51,3 +51,6 @@ logs/
 # Local secrets / environment config
 .env
 .env.*
+
+# Local notes
+GITHUB_WORKFLOW.md
