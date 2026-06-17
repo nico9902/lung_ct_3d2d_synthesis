@@ -66,9 +66,9 @@ for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
     check_val_every_n_epoch="$CHECK_VAL_EVERY_N_EPOCH" \
     val_froc_start_epoch=null \
     val_froc_before_start_every_n_epoch=null \
-    checkpoint_monitor=val/full_volume/loss \
+    checkpoint_monitor=val/random_crop/loss \
     checkpoint_mode=min \
-    checkpoint_filename="'epoch\={epoch:03d}-val_full_volume_loss\={val/full_volume/loss:.4f}'" \
+    checkpoint_filename="'epoch\={epoch:03d}-val_random_crop/loss\={val/random_crop/loss:.4f}'" \
     checkpoint_every_n_epochs="$CHECK_VAL_EVERY_N_EPOCH" \
     checkpoint_start_epoch="$CHECKPOINT_START_EPOCH" \
     "$@"
