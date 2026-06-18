@@ -74,6 +74,16 @@ def boundary_anchors(shape: tuple[int, int, int], z_value: float) -> np.ndarray:
     return np.asarray(points, dtype=np.float32)
 
 
+def grid_anchors(shape: tuple[int, int, int], z_value: float, grid_size: int) -> np.ndarray:
+    if grid_size <= 0:
+        return np.zeros((0, 3), dtype=np.float32)
+    _, height, width = shape
+    ys = np.linspace(0.0, float(height - 1), int(grid_size) + 2, dtype=np.float32)[1:-1]
+    xs = np.linspace(0.0, float(width - 1), int(grid_size) + 2, dtype=np.float32)[1:-1]
+    points = [[z_value, float(y), float(x)] for y in ys for x in xs]
+    return np.asarray(points, dtype=np.float32)
+
+
 def detection_points(detections: pd.DataFrame) -> np.ndarray:
     return detections[["coordZ", "coordY", "coordX"]].to_numpy(dtype=np.float32)
 
@@ -83,6 +93,8 @@ def thin_plate_surface(
     shape: tuple[int, int, int],
     smooth: float,
     use_boundary_anchors: bool,
+    anchor_grid_size: int,
+    surface_clip_margin: float | None,
 ) -> np.ndarray:
     depth, height, width = shape
     points = detection_points(detections)
@@ -90,11 +102,20 @@ def thin_plate_surface(
         raise ValueError("Cannot build a TPS surface without detections.")
 
     mean_z = float(np.clip(np.mean(points[:, 0]), 0.0, depth - 1.0))
+    if surface_clip_margin is None or surface_clip_margin < 0:
+        clip_min = 0.0
+        clip_max = float(depth - 1)
+    else:
+        clip_min = float(np.clip(np.min(points[:, 0]) - surface_clip_margin, 0.0, depth - 1.0))
+        clip_max = float(np.clip(np.max(points[:, 0]) + surface_clip_margin, 0.0, depth - 1.0))
     if len(points) == 1:
         return np.full((height, width), mean_z, dtype=np.float32)
 
     if use_boundary_anchors:
         points = np.vstack([points, boundary_anchors(shape, mean_z)])
+    grid_points = grid_anchors(shape, mean_z, anchor_grid_size)
+    if len(grid_points):
+        points = np.vstack([points, grid_points])
 
     y_grid, x_grid = np.mgrid[0:height, 0:width].astype(np.float32)
     try:
@@ -102,7 +123,7 @@ def thin_plate_surface(
     except np.linalg.LinAlgError:
         rbf = Rbf(points[:, 2], points[:, 1], points[:, 0], function="thin_plate", smooth=max(float(smooth), 1e-3))
     z_surface = rbf(x_grid, y_grid).astype(np.float32)
-    return np.clip(z_surface, 0.0, float(depth - 1))
+    return np.clip(z_surface, clip_min, clip_max)
 
 
 def sample_surface(volume: np.ndarray, z_surface: np.ndarray) -> np.ndarray:
@@ -168,19 +189,21 @@ def generate_for_fold(args: argparse.Namespace, fold: int) -> list[dict[str, obj
             shape=tuple(int(v) for v in volume.shape),
             smooth=args.smooth,
             use_boundary_anchors=not args.no_boundary_anchors,
+            anchor_grid_size=args.anchor_grid_size,
+            surface_clip_margin=args.surface_clip_margin,
         )
         synthetic = sample_surface(volume, z_surface)
-        image_u8 = to_uint8(synthetic)
 
         stem = output_stem(seriesuid)
-        image_out = out_dir / f"{stem}_tps_top{args.top_k}.png"
+        image_out = out_dir / f"{stem}_tps_top{args.top_k}.npy"
         surface_out = out_dir / f"{stem}_tps_z_surface.npy"
-        Image.fromarray(image_u8, mode="L").save(image_out)
+        np.save(image_out, synthetic.astype(np.float32))
         if args.save_surfaces:
             np.save(surface_out, z_surface.astype(np.float32))
 
         overlay_out = ""
-        if not args.no_overlays:
+        if args.save_overlays:
+            image_u8 = to_uint8(synthetic)
             overlay_path = out_dir / f"{stem}_tps_top{args.top_k}_overlay.png"
             save_overlay(image_u8, detections, overlay_path)
             overlay_out = str(overlay_path)
@@ -195,20 +218,24 @@ def generate_for_fold(args: argparse.Namespace, fold: int) -> list[dict[str, obj
                 "overlay_image": overlay_out,
                 "z_surface": str(surface_out) if args.save_surfaces else "",
                 "num_detections": int(len(detections)),
+                "anchor_grid_size": int(args.anchor_grid_size),
+                "surface_clip_margin": float(args.surface_clip_margin) if args.surface_clip_margin is not None else "",
                 "top_probability": float(detections["probability"].max()),
                 "mean_detection_z": float(detections["coordZ"].mean()),
+                "min_detection_z": float(detections["coordZ"].min()),
+                "max_detection_z": float(detections["coordZ"].max()),
             }
         )
 
     if manifest_rows:
         pd.DataFrame(manifest_rows).to_csv(out_dir / "manifest.csv", index=False)
-    print(f"[fold {fold}] wrote {len(manifest_rows)} TPS images to {out_dir}")
+    print(f"[fold {fold}] wrote {len(manifest_rows)} TPS image arrays to {out_dir}")
     return manifest_rows
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate LUNA16 SCPMNet synthetic 2D CT images through top detections using TPS/RBF interpolation."
+        description="Generate LUNA16 SCPMNet synthetic 2D CT image arrays through top detections using TPS/RBF interpolation."
     )
     parser.add_argument("--pred-root", default="outputs/scpmnet_luna16_10fold")
     parser.add_argument("--prediction-name", default="test_predictions.csv")
@@ -219,10 +246,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--folds", type=int, nargs="+", default=list(range(10)))
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--smooth", type=float, default=0.0)
+    parser.add_argument(
+        "--anchor-grid-size",
+        type=int,
+        default=5,
+        help="Number of internal TPS anchor points per axis. 5 means a 5x5 interior grid at mean detection z.",
+    )
+    parser.add_argument(
+        "--surface-clip-margin",
+        type=float,
+        default=40.0,
+        help="Limit TPS z values to [min_detection_z-margin, max_detection_z+margin]. Use a negative value to disable.",
+    )
     parser.add_argument("--clip", type=float, nargs=2, default=(-1000.0, 400.0))
     parser.add_argument("--max-scans", type=int, default=None)
     parser.add_argument("--save-surfaces", action="store_true")
-    parser.add_argument("--no-overlays", action="store_true")
+    parser.add_argument("--save-overlays", action="store_true", help="Also write PNG overlays for visual inspection.")
+    parser.add_argument("--no-overlays", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-boundary-anchors", action="store_true")
     parser.add_argument("--keep-missing-images", action="store_true")
     return parser.parse_args()
@@ -237,7 +277,7 @@ def main() -> None:
         out_dir = Path(args.output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(all_rows).to_csv(out_dir / "manifest.csv", index=False)
-    print(f"Wrote {len(all_rows)} total TPS images.")
+    print(f"Wrote {len(all_rows)} total TPS image arrays.")
 
 
 if __name__ == "__main__":
