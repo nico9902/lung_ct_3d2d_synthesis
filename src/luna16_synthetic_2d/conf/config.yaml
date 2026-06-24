@@ -1,0 +1,55 @@
+project_name: "lung_ct_3d2d_synthesis"
+stage: "luna16_saliency"
+seed: 42
+
+data:
+  dataset_type: "luna16_nii"
+  processed_dir: "data/LUNA16_preprocessed"
+  csv_file: "data/LUNA16_preprocessed/cv_splits/luna16_classification_fold0.csv"
+  return_mask: true
+  return_lung_mask: true
+  only_no_nodules: false
+  num_workers: 0
+
+saliency:
+  save_path: "outputs/luna16_saliency_synthetic_gt"
+  debug: false
+  show_plot: false
+  save_surface_grid: true
+  rbf_smooth: 0.1
+  num_boundary_anchors: 24
+  use_lung_volume_anchors: true
+  lung_anchor_erode_iterations: 1
+  snap_surface_to_lung: false
+  anchor_min_lung_area_fraction: 0.35
+  num_contour_points: 4
+  use_saved_lung_masks: true
+  lung_mask_method: "body_threshold"
+  normalized_air_threshold: 0.35
+  hu_air_min: -1000
+  hu_air_max: -320
+  body_threshold_percentile: 1
+  lung_component_count: 2
+  lungmask_model_name: "R231"
+  lungmask_force_cpu: false
+  pseudo_min_regions: 1
+  pseudo_max_regions: 3
+  pseudo_min_radius: 8
+  pseudo_max_radius: 20
+  pseudo_erode_iterations: 2
+  pseudo_central_percentile: 70
+  pseudo_min_slice_area_percentile: 35
+  pseudo_empirical_position_attempts: 100
+  pseudo_max_attempts: 5
+  min_lung_coverage: 0.25
+  min_best_lung_coverage: 0.10
+  use_empirical_pseudo_nodules: true
+  empirical_nodule_distribution_path: "outputs/luna16_saliency_control_point_distribution/empirical_nodule_distribution_from_control_points.npz"
+  lung_window_center: -600
+  lung_window_width: 1500
+
+hydra:
+  run:
+    dir: "${saliency.save_path}/hydra"
+  job_logging:
+    disable_existing_loggers: true

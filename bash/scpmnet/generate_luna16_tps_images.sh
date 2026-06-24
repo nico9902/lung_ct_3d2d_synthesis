@@ -23,6 +23,18 @@ TOP_K="${TOP_K:-5}"
 SMOOTH="${SMOOTH:-5.0}"
 ANCHOR_GRID_SIZE="${ANCHOR_GRID_SIZE:-10}"
 SURFACE_CLIP_MARGIN="${SURFACE_CLIP_MARGIN:-40.0}"
+FALLBACK_TOP_K="${FALLBACK_TOP_K:-3 1}"
+BOUNDARY_MARGIN="${BOUNDARY_MARGIN:-8.0}"
+MIN_PROBABILITY="${MIN_PROBABILITY:-}"
+QC_GOOD_Z_RANGE="${QC_GOOD_Z_RANGE:-180.0}"
+QC_GOOD_SLOPE_P99="${QC_GOOD_SLOPE_P99:-10.0}"
+QC_GOOD_CURV_P99="${QC_GOOD_CURV_P99:-2.5}"
+QC_MEDIUM_Z_RANGE="${QC_MEDIUM_Z_RANGE:-240.0}"
+QC_MEDIUM_SLOPE_P99="${QC_MEDIUM_SLOPE_P99:-16.0}"
+QC_MEDIUM_CURV_P99="${QC_MEDIUM_CURV_P99:-5.0}"
+GOOD_WEIGHT="${GOOD_WEIGHT:-1.0}"
+MEDIUM_WEIGHT="${MEDIUM_WEIGHT:-0.5}"
+BAD_WEIGHT="${BAD_WEIGHT:-0.2}"
 MAX_SCANS="${MAX_SCANS:-}"
 TEST_RUN="${TEST_RUN:-false}"
 
@@ -40,10 +52,16 @@ if [ -n "$MAX_SCANS" ]; then
   EXTRA_ARGS+=(--max-scans "$MAX_SCANS")
 fi
 
+if [ -n "$MIN_PROBABILITY" ]; then
+  EXTRA_ARGS+=(--min-probability "$MIN_PROBABILITY")
+fi
+
 FOLDS=()
 for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
   FOLDS+=("$FOLD")
 done
+
+read -r -a FALLBACK_TOP_K_VALUES <<< "$FALLBACK_TOP_K"
 
 python -m src.det.SCPMNet.generate_luna16_tps_images \
   --pred-root "$PRED_ROOT" \
@@ -54,6 +72,17 @@ python -m src.det.SCPMNet.generate_luna16_tps_images \
   --smooth "$SMOOTH" \
   --anchor-grid-size "$ANCHOR_GRID_SIZE" \
   --surface-clip-margin "$SURFACE_CLIP_MARGIN" \
+  --fallback-top-k "${FALLBACK_TOP_K_VALUES[@]}" \
+  --boundary-margin "$BOUNDARY_MARGIN" \
+  --qc-good-z-range "$QC_GOOD_Z_RANGE" \
+  --qc-good-slope-p99 "$QC_GOOD_SLOPE_P99" \
+  --qc-good-curv-p99 "$QC_GOOD_CURV_P99" \
+  --qc-medium-z-range "$QC_MEDIUM_Z_RANGE" \
+  --qc-medium-slope-p99 "$QC_MEDIUM_SLOPE_P99" \
+  --qc-medium-curv-p99 "$QC_MEDIUM_CURV_P99" \
+  --good-weight "$GOOD_WEIGHT" \
+  --medium-weight "$MEDIUM_WEIGHT" \
+  --bad-weight "$BAD_WEIGHT" \
   "${EXTRA_ARGS[@]}" \
   --folds "${FOLDS[@]}" \
   --save-surfaces \

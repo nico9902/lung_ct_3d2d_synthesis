@@ -3,7 +3,14 @@ from __future__ import annotations
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    matthews_corrcoef,
+    roc_auc_score,
+)
 
 from .models import build_model
 
@@ -18,17 +25,25 @@ class SyntheticLuna16Classifier(pl.LightningModule):
         weight_decay: float,
         pretrained: bool = True,
         freeze_backbone: bool = False,
+        freeze_half_backbone: bool = False,
+        freeze_first_layers: int = 0,
+        unfreeze_last_layers: int = 0,
         max_epochs: int = 50,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
+        output_dim = 1 if num_classes == 2 else num_classes
         self.model = build_model(
             backbone=backbone,
-            num_classes=num_classes,
+            num_classes=output_dim,
             pretrained=pretrained,
             freeze_backbone=freeze_backbone,
+            freeze_half_backbone=freeze_half_backbone,
+            freeze_first_layers=freeze_first_layers,
+            unfreeze_last_layers=unfreeze_last_layers,
         )
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss() if num_classes == 2 else nn.CrossEntropyLoss()
+        self.train_outputs: list[dict[str, torch.Tensor]] = []
         self.validation_outputs: list[dict[str, torch.Tensor]] = []
         self.test_outputs: list[dict[str, torch.Tensor]] = []
 
@@ -38,26 +53,28 @@ class SyntheticLuna16Classifier(pl.LightningModule):
     def _shared_step(self, batch, stage: str) -> torch.Tensor:
         images, labels, _ = batch
         logits = self(images)
-        loss = self.criterion(logits, labels)
-        probabilities = torch.softmax(logits, dim=1)
-        predictions = probabilities.argmax(dim=1)
+        if self.hparams.num_classes == 2:
+            logits = logits.squeeze(1)
+            loss = self.criterion(logits, labels.float())
+            scores = torch.sigmoid(logits)
+            predictions = (scores >= 0.5).long()
+        else:
+            loss = self.criterion(logits, labels)
+            scores = torch.softmax(logits, dim=1)
+            predictions = scores.argmax(dim=1)
 
         self.log(f"{stage}_loss", loss, on_epoch=True, prog_bar=True, sync_dist=True)
+        output = {
+            "labels": labels.detach().cpu(),
+            "predictions": predictions.detach().cpu(),
+            "scores": scores.detach().cpu(),
+        }
         if stage == "train":
-            acc = (predictions == labels).float().mean()
-            self.log("train_acc", acc, on_epoch=True, prog_bar=True, sync_dist=True)
-        else:
-            output = {
-                "labels": labels.detach().cpu(),
-                "predictions": predictions.detach().cpu(),
-                "scores": probabilities[:, 1].detach().cpu()
-                if probabilities.shape[1] == 2
-                else predictions.detach().cpu(),
-            }
-            if stage == "val":
-                self.validation_outputs.append(output)
-            elif stage == "test":
-                self.test_outputs.append(output)
+            self.train_outputs.append(output)
+        elif stage == "val":
+            self.validation_outputs.append(output)
+        elif stage == "test":
+            self.test_outputs.append(output)
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -76,11 +93,23 @@ class SyntheticLuna16Classifier(pl.LightningModule):
         predictions = torch.cat([item["predictions"] for item in outputs]).numpy()
         scores = torch.cat([item["scores"] for item in outputs]).numpy()
         accuracy = accuracy_score(labels, predictions)
+        f1 = f1_score(
+            labels,
+            predictions,
+            average="binary" if self.hparams.num_classes == 2 else "macro",
+            zero_division=0,
+        )
+        mcc = matthews_corrcoef(labels, predictions)
         self.log(f"{stage}_acc", accuracy, prog_bar=True, sync_dist=True)
+        self.log(f"{stage}_f1", f1, prog_bar=True, sync_dist=True)
+        self.log(f"{stage}_mcc", mcc, prog_bar=True, sync_dist=True)
 
         auc = 0.0
-        if self.hparams.num_classes == 2 and len(set(labels.tolist())) == 2:
+        observed_classes = set(labels.tolist())
+        if self.hparams.num_classes == 2 and len(observed_classes) == 2:
             auc = roc_auc_score(labels, scores)
+        elif self.hparams.num_classes > 2 and len(observed_classes) == self.hparams.num_classes:
+            auc = roc_auc_score(labels, scores, multi_class="ovr", average="macro")
         self.log(f"{stage}_auc", auc, prog_bar=True, sync_dist=True)
 
         if stage == "test":
@@ -95,6 +124,10 @@ class SyntheticLuna16Classifier(pl.LightningModule):
                 )
             )
             print(confusion_matrix(labels, predictions, labels=class_indices))
+
+    def on_train_epoch_end(self) -> None:
+        self._compute_epoch_metrics(self.train_outputs, "train")
+        self.train_outputs.clear()
 
     def on_validation_epoch_end(self) -> None:
         self._compute_epoch_metrics(self.validation_outputs, "val")
@@ -115,4 +148,3 @@ class SyntheticLuna16Classifier(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"},
         }
-

@@ -12,6 +12,7 @@ Input expected structure, for example:
 Outputs one folder per scan:
   output_dir/<seriesuid>/
     <seriesuid>_volume.nii.gz
+    <seriesuid>_lung_mask.nii.gz
     <seriesuid>_nodule_mask.nii.gz        optional
     <seriesuid>_metadata.json
 
@@ -140,7 +141,7 @@ def write_nifti(image: sitk.Image, output_path, compression=True):
     sitk.WriteImage(image, str(output_path), useCompression=compression)
 
 
-def save_metadata(output_dir, seriesuid, image, original_mhd_path=None, extendbox_zyx=None):
+def save_metadata(output_dir, seriesuid, image, original_mhd_path=None, extendbox_zyx=None, lung_mask_path=None):
     metadata = {
         "seriesuid": seriesuid,
         "original_mhd_path": str(original_mhd_path) if original_mhd_path is not None else None,
@@ -149,6 +150,7 @@ def save_metadata(output_dir, seriesuid, image, original_mhd_path=None, extendbo
         "size_xyz": list(map(int, image.GetSize())),
         "direction": list(map(float, image.GetDirection())),
         "extendbox_zyx": None,
+        "lung_mask_path": str(lung_mask_path) if lung_mask_path is not None else None,
     }
     if extendbox_zyx is not None:
         metadata["extendbox_zyx"] = {
@@ -163,6 +165,19 @@ def save_metadata(output_dir, seriesuid, image, original_mhd_path=None, extendbo
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / f"{seriesuid}_metadata.json").open("w") as f:
+        json.dump(metadata, f, indent=2)
+
+
+def update_metadata_lung_mask_path(output_dir, seriesuid, lung_mask_path):
+    output_dir = Path(output_dir)
+    metadata_path = output_dir / f"{seriesuid}_metadata.json"
+    if metadata_path.exists():
+        with metadata_path.open() as f:
+            metadata = json.load(f)
+    else:
+        metadata = {"seriesuid": seriesuid}
+    metadata["lung_mask_path"] = str(lung_mask_path)
+    with metadata_path.open("w") as f:
         json.dump(metadata, f, indent=2)
 
 
@@ -366,6 +381,7 @@ def process_luna_scan(
     output_root,
     annotations_by_series,
     write_mask=True,
+    write_lung_mask=True,
     overwrite=False,
     crop_lungs=True,
     lung_padding=10,
@@ -378,8 +394,14 @@ def process_luna_scan(
     output_dir = Path(output_root) / seriesuid
     volume_path = output_dir / f"{seriesuid}_volume.nii.gz"
     mask_path = output_dir / f"{seriesuid}_nodule_mask.nii.gz"
+    lung_mask_path = output_dir / f"{seriesuid}_lung_mask.nii.gz"
 
-    if not overwrite and volume_path.exists() and (mask_path.exists() or not write_mask):
+    if (
+        not overwrite
+        and volume_path.exists()
+        and (mask_path.exists() or not write_mask)
+        and (lung_mask_path.exists() or not write_lung_mask)
+    ):
         print(f"{seriesuid}: already processed")
         label_rows = []
         if write_mask and mask_path.exists():
@@ -395,17 +417,24 @@ def process_luna_scan(
     image = resample_image(image, out_spacing=out_spacing, interpolator=sitk.sitkLinear)
     img_array = lumTrans(sitk.GetArrayFromImage(image))
     extendbox = None
+    lung_mask_array = None
 
     if crop_lungs:
         try:
             # Lungmask should run on intensity image, not uint8 lung-windowed image.
             original_resampled_array = sitk.GetArrayFromImage(image)
             lung_mask = get_lung_mask(original_resampled_array, model_name=lungmask_model, force_cpu=force_cpu)
+            lung_mask_array = lung_mask.astype(np.uint8)
             dilated_mask = process_mask(lung_mask, iterations=10)
             extendbox = get_extendbox(lung_mask, margin=lung_padding)
 
             if extendbox is not None:
                 img_array = img_array * dilated_mask.astype(np.uint8)
+                lung_mask_array = lung_mask_array[
+                    extendbox[0, 0]:extendbox[0, 1],
+                    extendbox[1, 0]:extendbox[1, 1],
+                    extendbox[2, 0]:extendbox[2, 1],
+                ]
                 crop_arr = img_array[
                     extendbox[0, 0]:extendbox[0, 1],
                     extendbox[1, 0]:extendbox[1, 1],
@@ -420,7 +449,19 @@ def process_luna_scan(
             print(f"{seriesuid}: lung crop failed ({e}); writing uncropped volume")
             image = image_from_array_like(img_array, image)
             extendbox = None
+            lung_mask_array = None
     else:
+        if write_lung_mask:
+            try:
+                original_resampled_array = sitk.GetArrayFromImage(image)
+                lung_mask_array = get_lung_mask(
+                    original_resampled_array,
+                    model_name=lungmask_model,
+                    force_cpu=force_cpu,
+                ).astype(np.uint8)
+            except Exception as e:
+                print(f"{seriesuid}: lung mask inference failed ({e}); no lung mask written")
+                lung_mask_array = None
         image = image_from_array_like(img_array, image)
 
     nodules = annotations_by_series.get(seriesuid, [])
@@ -433,15 +474,99 @@ def process_luna_scan(
         write_nifti(mask_image, mask_path)
         written_mask = str(mask_path)
 
+    written_lung_mask = None
+    if write_lung_mask and lung_mask_array is not None:
+        lung_mask_image = image_from_array_like(lung_mask_array.astype(np.uint8), image)
+        write_nifti(lung_mask_image, lung_mask_path)
+        written_lung_mask = str(lung_mask_path)
+
     write_nifti(image, volume_path)
-    save_metadata(output_dir, seriesuid, image, original_mhd_path=mhd_path, extendbox_zyx=extendbox)
+    save_metadata(
+        output_dir,
+        seriesuid,
+        image,
+        original_mhd_path=mhd_path,
+        extendbox_zyx=extendbox,
+        lung_mask_path=written_lung_mask,
+    )
 
     print(
         f"{seriesuid}: wrote {volume_path}"
+        + (f" and {lung_mask_path}" if written_lung_mask else "")
         + (f" and {mask_path}" if written_mask else "")
         + f" | nodules: {len(nodules)}"
     )
     return str(volume_path), written_mask, label_rows
+
+
+def find_preprocessed_series_dir(output_root, seriesuid):
+    output_root = Path(output_root)
+    direct = output_root / seriesuid
+    direct_volume = direct / f"{seriesuid}_volume.nii.gz"
+    if direct_volume.exists():
+        return direct
+
+    matches = sorted(output_root.rglob(f"{seriesuid}_volume.nii.gz"))
+    if matches:
+        return matches[0].parent
+    return direct
+
+
+def process_luna_lung_mask_only(
+    mhd_path,
+    output_root,
+    overwrite=False,
+    lungmask_model="R231",
+    force_cpu=False,
+    out_spacing=(1.0, 1.0, 1.0),
+):
+    mhd_path = Path(mhd_path)
+    seriesuid = mhd_path.stem
+    output_dir = find_preprocessed_series_dir(output_root, seriesuid)
+    volume_path = output_dir / f"{seriesuid}_volume.nii.gz"
+    lung_mask_path = output_dir / f"{seriesuid}_lung_mask.nii.gz"
+
+    if not volume_path.exists():
+        print(f"{seriesuid}: missing preprocessed volume; skipping lung-mask-only mode")
+        return None
+    if lung_mask_path.exists() and not overwrite:
+        print(f"{seriesuid}: lung mask already exists")
+        return str(lung_mask_path)
+
+    try:
+        original_image = sitk.ReadImage(str(mhd_path))
+    except Exception as e:
+        print(f"{seriesuid}: failed to read {mhd_path}: {e}")
+        return None
+
+    try:
+        resampled_image = resample_image(
+            original_image,
+            out_spacing=out_spacing,
+            interpolator=sitk.sitkLinear,
+        )
+        lung_mask_array = get_lung_mask(
+            sitk.GetArrayFromImage(resampled_image),
+            model_name=lungmask_model,
+            force_cpu=force_cpu,
+        ).astype(np.uint8)
+        lung_mask_image = image_from_array_like(lung_mask_array, resampled_image)
+
+        reference_image = sitk.ReadImage(str(volume_path))
+        resampler = sitk.ResampleImageFilter()
+        resampler.SetReferenceImage(reference_image)
+        resampler.SetInterpolator(sitk.sitkNearestNeighbor)
+        resampler.SetTransform(sitk.Transform(3, sitk.sitkIdentity))
+        lung_mask_image = resampler.Execute(lung_mask_image)
+        lung_mask_image = sitk.Cast(lung_mask_image > 0, sitk.sitkUInt8)
+
+        write_nifti(lung_mask_image, lung_mask_path)
+        update_metadata_lung_mask_path(output_dir, seriesuid, lung_mask_path)
+        print(f"{seriesuid}: wrote lung mask {lung_mask_path}")
+        return str(lung_mask_path)
+    except Exception as e:
+        print(f"{seriesuid}: lung-mask-only failed ({e})")
+        return None
 
 
 def preprocess_luna16(
@@ -451,6 +576,8 @@ def preprocess_luna16(
     num_workers=1,
     limit=None,
     write_mask=True,
+    write_lung_mask=True,
+    lung_mask_only=False,
     overwrite=False,
     crop_lungs=True,
     lung_padding=10,
@@ -466,6 +593,25 @@ def preprocess_luna16(
     scans = find_luna_scans(luna_root)
     if limit is not None:
         scans = scans[:limit]
+
+    if lung_mask_only:
+        print(f"starting LUNA16 lung-mask-only export: {len(scans)} scan(s)")
+        kwargs = {
+            "output_root": str(output_dir),
+            "overwrite": overwrite,
+            "lungmask_model": lungmask_model,
+            "force_cpu": force_cpu,
+            "out_spacing": out_spacing,
+        }
+        if num_workers > 1:
+            worker = partial(process_luna_lung_mask_only, **kwargs)
+            with Pool(num_workers) as pool:
+                pool.map(worker, [str(scan) for scan in scans])
+        else:
+            for scan in scans:
+                process_luna_lung_mask_only(str(scan), **kwargs)
+        print("end LUNA16 lung-mask-only export")
+        return
 
     if annotations_csv is None:
         default_paths = [
@@ -483,6 +629,7 @@ def preprocess_luna16(
         "output_root": str(output_dir),
         "annotations_by_series": annotations_by_series,
         "write_mask": write_mask,
+        "write_lung_mask": write_lung_mask,
         "overwrite": overwrite,
         "crop_lungs": crop_lungs,
         "lung_padding": lung_padding,
@@ -518,6 +665,8 @@ def main():
     parser.add_argument("--num-workers", type=int, default=1, help="Number of worker processes.")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N sorted scans.")
     parser.add_argument("--volume-only", action="store_true", help="Write only CT volumes, not nodule masks.")
+    parser.add_argument("--lung-mask-only", action="store_true", help="Only write lung masks aligned to existing preprocessed volumes.")
+    parser.add_argument("--no-lung-mask", action="store_true", help="Do not write per-scan lung masks.")
     parser.add_argument("--no-lung-crop", action="store_true", help="Disable lungmask-based lung cropping.")
     parser.add_argument("--lung-padding", type=int, default=10, help="Voxel padding around lung bbox.")
     parser.add_argument("--lungmask-model", default="R231", help="LMInferer model name.")
@@ -534,6 +683,8 @@ def main():
         num_workers=args.num_workers,
         limit=args.limit,
         write_mask=not args.volume_only,
+        write_lung_mask=not args.no_lung_mask,
+        lung_mask_only=args.lung_mask_only,
         overwrite=args.overwrite,
         crop_lungs=not args.no_lung_crop,
         lung_padding=args.lung_padding,

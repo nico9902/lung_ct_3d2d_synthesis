@@ -1,0 +1,11 @@
+region_count,scan_count,probability,group
+1,310,0.5158069883527454,with_nodules_real_nodule_count
+2,159,0.26455906821963393,with_nodules_real_nodule_count
+3,63,0.1048252911813644,with_nodules_real_nodule_count
+4,24,0.03993344425956739,with_nodules_real_nodule_count
+5,23,0.03826955074875208,with_nodules_real_nodule_count
+6,11,0.018302828618968387,with_nodules_real_nodule_count
+7,4,0.0066555740432612314,with_nodules_real_nodule_count
+8,2,0.0033277870216306157,with_nodules_real_nodule_count
+9,4,0.0066555740432612314,with_nodules_real_nodule_count
+12,1,0.0016638935108153079,with_nodules_real_nodule_count

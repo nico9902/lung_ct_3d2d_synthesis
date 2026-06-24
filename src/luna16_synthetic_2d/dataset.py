@@ -21,6 +21,7 @@ class ImageSample:
     class_name: str
     split: str
     sample_id: str
+    sample_weight: float = 1.0
 
 
 def _normalise_class_name(value: str) -> str:
@@ -49,20 +50,21 @@ def _label_column(df: pd.DataFrame, csv_path: Path) -> str:
 
 
 def _read_samples(
-    manifest_csv: str | Path,
+    synthetic_images_dir: str | Path,
     split_csv: str | Path,
+    fold: int,
     split: str,
     classes: Iterable[str],
-    image_column: str,
+    image_suffix: str,
 ) -> list[ImageSample]:
-    manifest_csv = Path(manifest_csv)
+    synthetic_images_dir = Path(synthetic_images_dir)
     split_csv = Path(split_csv)
-    manifest = pd.read_csv(manifest_csv)
+    if not synthetic_images_dir.exists():
+        raise FileNotFoundError(f"Synthetic images directory does not exist: {synthetic_images_dir}")
     split_df = pd.read_csv(split_csv)
-    path_search_roots = [Path.cwd(), *manifest_csv.parents, *split_csv.parents]
+    path_search_roots = [Path.cwd(), synthetic_images_dir, *synthetic_images_dir.parents, *split_csv.parents]
 
     for path, df, required in [
-        (manifest_csv, manifest, ["seriesuid", image_column]),
         (split_csv, split_df, ["seriesuid", "split"]),
     ]:
         missing = [column for column in required if column not in df.columns]
@@ -71,21 +73,35 @@ def _read_samples(
 
     label_col = _label_column(split_df, split_csv)
     split_df = split_df[split_df["split"].astype(str) == split].copy()
-    merged = split_df.merge(manifest[["seriesuid", image_column]], on="seriesuid", how="inner")
 
     normalised_classes = [_normalise_class_name(c) for c in classes]
     class_to_idx = {name: idx for idx, name in enumerate(normalised_classes)}
     samples: list[ImageSample] = []
     missing_files = 0
+    first_missing_candidates: list[Path] | None = None
 
-    for _, row in merged.iterrows():
+    for _, row in split_df.iterrows():
         class_name = _normalise_class_name(row[label_col])
         if class_name not in class_to_idx:
             continue
 
-        image_path = _resolve_image_path(row[image_column], path_search_roots)
+        sample_id = str(row["seriesuid"])
+        image_path = _resolve_sample_image_path(
+            synthetic_images_dir=synthetic_images_dir,
+            fold=fold,
+            sample_id=sample_id,
+            image_suffix=image_suffix,
+            search_roots=path_search_roots,
+        )
         if not image_path.exists():
             missing_files += 1
+            if first_missing_candidates is None:
+                first_missing_candidates = _candidate_image_paths(
+                    synthetic_images_dir=synthetic_images_dir,
+                    fold=fold,
+                    sample_id=sample_id,
+                    image_suffix=image_suffix,
+                )
             continue
 
         samples.append(
@@ -94,16 +110,60 @@ def _read_samples(
                 label=class_to_idx[class_name],
                 class_name=class_name,
                 split=split,
-                sample_id=str(row["seriesuid"]),
+                sample_id=sample_id,
+                sample_weight=float(row.get("sample_weight", 1.0)),
             )
         )
 
     if not samples:
+        candidate_hint = ""
+        if first_missing_candidates is not None:
+            formatted_candidates = ", ".join(str(path) for path in first_missing_candidates[:5])
+            candidate_hint = f" First candidates tried: {formatted_candidates}."
         raise RuntimeError(
-            f"No images found for split '{split}' after joining {manifest_csv} with {split_csv}. "
-            f"Skipped missing files: {missing_files}."
+            f"No images found for split '{split}' in {synthetic_images_dir} using {split_csv}. "
+            f"Skipped missing files: {missing_files}.{candidate_hint}"
         )
     return samples
+
+
+def _candidate_image_paths(
+    synthetic_images_dir: Path,
+    fold: int,
+    sample_id: str,
+    image_suffix: str,
+) -> list[Path]:
+    fold_dir = synthetic_images_dir / f"fold_{fold}"
+    return [
+        fold_dir / f"{sample_id}{image_suffix}",
+        synthetic_images_dir / f"{sample_id}{image_suffix}",
+        fold_dir / sample_id / f"surface_{sample_id}.png",
+        fold_dir / sample_id / f"surface_grid_float_{sample_id}.npy",
+        fold_dir / sample_id / f"surface_grid_int_{sample_id}.npy",
+        synthetic_images_dir / sample_id / f"surface_{sample_id}.png",
+        synthetic_images_dir / sample_id / f"surface_grid_float_{sample_id}.npy",
+        synthetic_images_dir / sample_id / f"surface_grid_int_{sample_id}.npy",
+    ]
+
+
+def _resolve_sample_image_path(
+    synthetic_images_dir: Path,
+    fold: int,
+    sample_id: str,
+    image_suffix: str,
+    search_roots: Iterable[Path],
+) -> Path:
+    candidates = _candidate_image_paths(
+        synthetic_images_dir=synthetic_images_dir,
+        fold=fold,
+        sample_id=sample_id,
+        image_suffix=image_suffix,
+    )
+    for candidate in candidates:
+        resolved = _resolve_image_path(candidate, search_roots)
+        if resolved.exists():
+            return resolved
+    return candidates[0]
 
 
 def _resolve_image_path(path_value, search_roots: Iterable[Path]) -> Path:
@@ -122,20 +182,23 @@ class SyntheticLuna16Dataset(Dataset):
 
     def __init__(
         self,
-        manifest_csv: str | Path,
+        synthetic_images_dir: str | Path,
         split_csv: str | Path,
+        fold: int,
         split: str,
         transform=None,
         classes: Iterable[str] = ("benign", "malignant"),
-        image_column: str = "synthetic_image",
+        image_suffix: str = "_tps_top5.npy",
     ) -> None:
         self.samples = _read_samples(
-            manifest_csv=manifest_csv,
+            synthetic_images_dir=synthetic_images_dir,
             split_csv=split_csv,
+            fold=fold,
             split=split,
             classes=classes,
-            image_column=image_column,
+            image_suffix=image_suffix,
         )
+        self.labels = [sample.label for sample in self.samples]
         self.transform = transform
 
     def __len__(self) -> int:
@@ -148,6 +211,20 @@ class SyntheticLuna16Dataset(Dataset):
             image = self.transform(image)
         label = torch.tensor(sample.label, dtype=torch.long)
         return image, label, sample.sample_id
+
+    def get_sampler(self):
+        labels = np.array(self.labels)
+        neg_class_count = (labels == 0).sum()
+        pos_class_count = (labels == 1).sum()
+        class_weight = [1 / neg_class_count, 1 / pos_class_count]
+        weights = [class_weight[sample.label] * sample.sample_weight for sample in self.samples]
+
+        weights = torch.Tensor(weights).double()
+        sampler = torch.utils.data.sampler.WeightedRandomSampler(
+            weights, num_samples=len(weights), replacement=True
+        )
+
+        return sampler
 
 
 def load_image(path: str | Path) -> Image.Image:

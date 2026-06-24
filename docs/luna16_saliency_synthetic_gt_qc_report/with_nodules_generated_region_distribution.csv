@@ -1,0 +1,11 @@
+region_count,scan_count,probability,group
+1,313,0.5207986688851913,with_nodules_generated_control_regions
+2,156,0.259567387687188,with_nodules_generated_control_regions
+3,64,0.1064891846921797,with_nodules_generated_control_regions
+4,24,0.03993344425956739,with_nodules_generated_control_regions
+5,24,0.03993344425956739,with_nodules_generated_control_regions
+6,9,0.014975041597337771,with_nodules_generated_control_regions
+7,4,0.0066555740432612314,with_nodules_generated_control_regions
+8,2,0.0033277870216306157,with_nodules_generated_control_regions
+9,4,0.0066555740432612314,with_nodules_generated_control_regions
+12,1,0.0016638935108153079,with_nodules_generated_control_regions

@@ -20,6 +20,7 @@ python "${PYTHON_SCRIPT}" \
   --dicom-dir "${LUNA_ROOT}" \
   --output-dir "${OUTPUT_DIR}" \
   --labels-csv "${LABELS_CSV}" \
+  --lung-mask-only \
   --spacing 1 1 1 \
   --num-workers 1
 

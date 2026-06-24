@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" width="920" height="560" role="img" aria-labelledby="title desc">
+<title id="title">SCPMNet LUNA16 detection coverage by top-k</title>
+<desc id="desc">Line chart showing nodule coverage as top-k detections per scan increases from one to ten.</desc>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="82" y="28" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#1f2933">SCPMNet LUNA16 Detection Coverage by Top-k</text>
+<line x1="82" y1="484.0" x2="886" y2="484.0" stroke="#d9e2ec" stroke-width="1"/>
+<text x="70" y="488.0" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#52606d">0%</text>
+<line x1="82" y1="396.8" x2="886" y2="396.8" stroke="#d9e2ec" stroke-width="1"/>
+<text x="70" y="400.8" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#52606d">20%</text>
+<line x1="82" y1="309.6" x2="886" y2="309.6" stroke="#d9e2ec" stroke-width="1"/>
+<text x="70" y="313.6" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#52606d">40%</text>
+<line x1="82" y1="222.4" x2="886" y2="222.4" stroke="#d9e2ec" stroke-width="1"/>
+<text x="70" y="226.4" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#52606d">60%</text>
+<line x1="82" y1="135.2" x2="886" y2="135.2" stroke="#d9e2ec" stroke-width="1"/>
+<text x="70" y="139.2" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#52606d">80%</text>
+<line x1="82" y1="48.0" x2="886" y2="48.0" stroke="#d9e2ec" stroke-width="1"/>
+<text x="70" y="52.0" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#52606d">100%</text>
+<line x1="82.0" y1="48" x2="82.0" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="82.0" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">1</text>
+<line x1="171.3" y1="48" x2="171.3" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="171.3" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">2</text>
+<line x1="260.7" y1="48" x2="260.7" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="260.7" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">3</text>
+<line x1="350.0" y1="48" x2="350.0" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="350.0" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">4</text>
+<line x1="439.3" y1="48" x2="439.3" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="439.3" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">5</text>
+<line x1="528.7" y1="48" x2="528.7" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="528.7" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">6</text>
+<line x1="618.0" y1="48" x2="618.0" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="618.0" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">7</text>
+<line x1="707.3" y1="48" x2="707.3" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="707.3" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">8</text>
+<line x1="796.7" y1="48" x2="796.7" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="796.7" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">9</text>
+<line x1="886.0" y1="48" x2="886.0" y2="484" stroke="#eef2f7" stroke-width="1"/>
+<text x="886.0" y="509" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#52606d">10</text>
+<line x1="82" y1="48" x2="82" y2="484" stroke="#9fb3c8" stroke-width="1.2"/>
+<line x1="82" y1="484" x2="886" y2="484" stroke="#9fb3c8" stroke-width="1.2"/>
+<polyline points="82.0,269.9 171.3,184.2 260.7,129.8 350.0,110.3 439.3,102.5 528.7,98.6 618.0,98.6 707.3,94.7 796.7,90.8 886.0,90.8" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,320.5 171.3,235.3 260.7,180.8 350.0,143.4 439.3,119.5 528.7,99.1 618.0,82.1 707.3,78.7 796.7,78.7 886.0,78.7" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,330.7 171.3,252.4 260.7,197.9 350.0,174.0 439.3,146.8 528.7,136.6 618.0,122.9 707.3,112.7 796.7,112.7 886.0,109.3" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,311.8 171.3,234.9 260.7,168.9 350.0,135.9 439.3,117.6 528.7,103.0 618.0,99.3 707.3,84.6 796.7,81.0 886.0,77.3" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,313.7 171.3,221.7 260.7,184.2 350.0,157.0 439.3,143.4 528.7,126.3 618.0,116.1 707.3,116.1 796.7,102.5 886.0,99.1" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,322.5 171.3,233.7 260.7,185.3 350.0,165.1 439.3,144.9 528.7,128.7 618.0,124.7 707.3,112.6 796.7,108.6 886.0,108.6" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,318.4 171.3,230.5 260.7,183.2 350.0,149.4 439.3,132.5 528.7,122.4 618.0,112.2 707.3,102.1 796.7,95.3 886.0,91.9" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,385.8 171.3,326.9 260.7,279.7 350.0,271.9 439.3,260.1 528.7,248.3 618.0,232.6 707.3,228.7 796.7,220.8 886.0,220.8" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,472.9 171.3,458.1 260.7,424.9 350.0,380.5 439.3,332.5 528.7,288.2 618.0,229.1 707.3,214.3 796.7,199.5 886.0,188.4" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<polyline points="82.0,297.1 171.3,226.6 260.7,197.5 350.0,176.7 439.3,151.8 528.7,139.4 618.0,131.0 707.3,122.7 796.7,118.6 886.0,114.4" fill="none" stroke="#9fb3c8" stroke-opacity="0.42" stroke-width="1.5"/>
+<path d="M 82.0 277.6 L 171.3 182.3 L 260.7 130.1 L 350.0 106.1 L 439.3 92.3 L 528.7 83.8 L 618.0 82.2 L 707.3 74.8 L 796.7 71.8 L 886.0 70.0 L 886.0 165.9 L 796.7 169.9 L 707.3 178.7 L 618.0 187.5 L 528.7 214.3 L 439.3 238.0 L 350.0 266.8 L 260.7 296.4 L 171.3 338.5 L 82.0 391.0 Z" fill="#6b8e23" fill-opacity="0.16"/>
+<polyline points="82.0,334.3 171.3,260.4 260.7,213.2 350.0,186.4 439.3,165.2 528.7,149.1 618.0,134.9 707.3,126.7 796.7,120.8 886.0,117.9" fill="none" stroke="#3f6f20" stroke-width="3"/>
+<circle cx="82.0" cy="334.3" r="4" fill="#3f6f20"/>
+<circle cx="171.3" cy="260.4" r="4" fill="#3f6f20"/>
+<circle cx="260.7" cy="213.2" r="4" fill="#3f6f20"/>
+<circle cx="350.0" cy="186.4" r="4" fill="#3f6f20"/>
+<circle cx="439.3" cy="165.2" r="4" fill="#3f6f20"/>
+<circle cx="528.7" cy="149.1" r="4" fill="#3f6f20"/>
+<circle cx="618.0" cy="134.9" r="4" fill="#3f6f20"/>
+<circle cx="707.3" cy="126.7" r="4" fill="#3f6f20"/>
+<circle cx="796.7" cy="120.8" r="4" fill="#3f6f20"/>
+<circle cx="886.0" cy="117.9" r="4" fill="#3f6f20"/>
+<polyline points="82.0,334.4 171.3,260.1 260.7,212.7 350.0,185.5 439.3,164.2 528.7,148.0 618.0,133.7 707.3,125.6 796.7,119.7 886.0,116.7" fill="none" stroke="#b23a48" stroke-width="3.5"/>
+<rect x="78.0" y="330.4" width="8" height="8" fill="#b23a48"/>
+<rect x="167.3" y="256.1" width="8" height="8" fill="#b23a48"/>
+<rect x="256.7" y="208.7" width="8" height="8" fill="#b23a48"/>
+<rect x="346.0" y="181.5" width="8" height="8" fill="#b23a48"/>
+<rect x="435.3" y="160.2" width="8" height="8" fill="#b23a48"/>
+<rect x="524.7" y="144.0" width="8" height="8" fill="#b23a48"/>
+<rect x="614.0" y="129.7" width="8" height="8" fill="#b23a48"/>
+<rect x="703.3" y="121.6" width="8" height="8" fill="#b23a48"/>
+<rect x="792.7" y="115.7" width="8" height="8" fill="#b23a48"/>
+<rect x="882.0" y="112.7" width="8" height="8" fill="#b23a48"/>
+<text x="484.0" y="538" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#1f2933">Top-k detections kept per scan</text>
+<text transform="translate(22 266.0) rotate(-90)" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#1f2933">Ground-truth nodules covered</text>
+<rect x="594" y="54" width="276" height="86" rx="4" fill="#ffffff" stroke="#d9e2ec"/>
+<line x1="610" y1="78" x2="644" y2="78" stroke="#b23a48" stroke-width="3.5"/>
+<text x="654" y="82" font-family="Arial, sans-serif" font-size="13" fill="#1f2933">Pooled 10-fold</text>
+<line x1="610" y1="102" x2="644" y2="102" stroke="#3f6f20" stroke-width="3"/>
+<text x="654" y="106" font-family="Arial, sans-serif" font-size="13" fill="#1f2933">Fold mean</text>
+<line x1="610" y1="126" x2="644" y2="126" stroke="#9fb3c8" stroke-opacity="0.55" stroke-width="1.5"/>
+<text x="654" y="130" font-family="Arial, sans-serif" font-size="13" fill="#1f2933">Individual folds; shaded +/-1 std</text>
+</svg>
