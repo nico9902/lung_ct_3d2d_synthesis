@@ -40,6 +40,12 @@ def parse_scans_from_output_root(output_root: Path) -> dict[str, int]:
     return {seriesuid: 0 for seriesuid in sorted(seriesuids)}
 
 
+def parse_positive_scans_from_labels(labels_csv: Path) -> dict[str, int]:
+    labels = pd.read_csv(labels_csv)
+    labels = labels[labels["label"].astype(str).str.lower().eq("nodule")].copy()
+    return labels.groupby("seriesuid").size().astype(int).to_dict()
+
+
 def load_output_control_points(sample_dir: Path, seriesuid: str) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     control_path = sample_dir / f"control_points_{seriesuid}.npy"
     labels_path = sample_dir / f"point_labels_{seriesuid}.npy"
@@ -58,6 +64,7 @@ def load_output_control_points(sample_dir: Path, seriesuid: str) -> tuple[np.nda
 def build_distribution_from_output_control_points(
     output_root: Path,
     output_dir: Path,
+    preprocessed_root: Path | None = None,
     positive_scans: dict[str, int] | None = None,
 ) -> tuple[Path, Path, Path]:
     if not output_root.exists():
@@ -68,6 +75,7 @@ def build_distribution_from_output_control_points(
     counts = []
     skipped = []
     skipped_not_positive = []
+    missing_metadata = []
     for sample_dir in sorted(p for p in output_root.iterdir() if p.is_dir() and p.name != "hydra"):
         seriesuid = sample_dir.name
         if positive_scans is not None and seriesuid not in positive_scans:
@@ -86,14 +94,27 @@ def build_distribution_from_output_control_points(
             skipped.append(seriesuid)
             continue
 
-        if surface_grid is not None:
+        metadata = None
+        if preprocessed_root is not None:
+            try:
+                metadata = load_metadata(preprocessed_root, seriesuid)
+            except FileNotFoundError:
+                missing_metadata.append(seriesuid)
+
+        if metadata is not None:
+            size_x, size_y, size_z = metadata["size_xyz"]
+            h = int(size_y)
+            w = int(size_x)
+            depth = float(size_z)
+        elif surface_grid is not None:
             h, w = surface_grid.shape
             max_z = max(float(np.max(surface_grid)), float(np.max(controls[:, 0])))
+            depth = max(max_z + 1.0, 1.0)
         else:
             h = int(np.ceil(np.max(control_points[:, 1]))) + 1
             w = int(np.ceil(np.max(control_points[:, 2]))) + 1
             max_z = float(np.max(controls[:, 0]))
-        depth = max(max_z + 1.0, 1.0)
+            depth = max(max_z + 1.0, 1.0)
 
         nodule_count = int(len(controls) // 5)
         if len(controls) % 5 != 0:
@@ -189,6 +210,8 @@ def build_distribution_from_output_control_points(
         "nodules": int(positions_df.shape[0]),
         "skipped_samples": skipped,
         "skipped_not_positive_in_log": skipped_not_positive,
+        "preprocessed_root": str(preprocessed_root) if preprocessed_root is not None else None,
+        "missing_metadata_scans": sorted(set(missing_metadata)),
         "relative_position_mean_zyx": positions_df[["rel_z", "rel_y", "rel_x"]].mean().round(6).to_dict(),
         "relative_position_std_zyx": positions_df[["rel_z", "rel_y", "rel_x"]].std().round(6).to_dict(),
         "relative_position_quantiles_zyx": {
@@ -210,9 +233,10 @@ def build_distribution_from_output_control_points(
         "",
         f"Source output root: `{output_root}`",
         "",
-        "This distribution is derived only from `control_points_*.npy`, `point_labels_*.npy`, and surface-grid files saved in the output folders.",
+        "This distribution is derived from `control_points_*.npy`, `point_labels_*.npy`, and preprocessed volume metadata when available.",
+        "If metadata is missing for a scan, the script falls back to the saved surface-grid extent for that scan.",
         "Every 5 control points are treated as one nodule; the first point in each group is the nodule center used for the empirical position distribution.",
-        "It does **not** use `LUNA16_preprocessed` metadata or annotation CSV coordinates.",
+        "It does **not** use annotation CSV coordinates.",
         "",
         "## Summary",
         "",
@@ -221,12 +245,14 @@ def build_distribution_from_output_control_points(
         f"- Nodules: **{summary['nodules']}**",
         f"- Positive-log filter enabled: **{summary['positive_log_filter']}**",
         f"- Positive scans in log: **{summary['positive_scans_in_log']}**",
+        f"- Preprocessed root: `{summary['preprocessed_root']}`",
+        f"- Missing metadata scans: **{len(summary['missing_metadata_scans'])}**",
         f"- Skipped because not positive in log: **{len(skipped_not_positive)}**",
         f"- Skipped samples: **{len(skipped)}**",
         "",
         "## Relative Position Distribution",
         "",
-        "Nodule-center coordinates are normalized per saved surface grid and saved in `[rel_z, rel_y, rel_x]`.",
+        "Nodule-center coordinates are normalized to each preprocessed volume size and saved in `[rel_z, rel_y, rel_x]`.",
         "",
         "| Axis | Mean | Std | Q05 | Q25 | Q50 | Q75 | Q95 |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -273,6 +299,10 @@ def build_distribution_from_output_control_points(
 
 def load_metadata(preprocessed_root: Path, seriesuid: str) -> dict:
     metadata_path = preprocessed_root / seriesuid / f"{seriesuid}_metadata.json"
+    if not metadata_path.exists():
+        matches = sorted(preprocessed_root.glob(f"**/{seriesuid}_metadata.json"))
+        if matches:
+            metadata_path = matches[0]
     with metadata_path.open() as f:
         return json.load(f)
 
@@ -501,10 +531,15 @@ def main():
     )
     args = parser.parse_args()
     if args.source == "control-points":
-        positive_scans = parse_positive_scans_from_log(args.log_path)
+        if args.log_path.exists():
+            positive_scans = parse_positive_scans_from_log(args.log_path)
+        else:
+            print(f"Warning: log not found at {args.log_path}; using positive scans from {args.labels_csv}.")
+            positive_scans = parse_positive_scans_from_labels(args.labels_csv)
         outputs = build_distribution_from_output_control_points(
             output_root=args.output_root,
             output_dir=args.output_dir,
+            preprocessed_root=args.preprocessed_root,
             positive_scans=positive_scans,
         )
     else:

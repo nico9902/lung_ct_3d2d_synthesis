@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
+from sklearn.metrics import accuracy_score, f1_score, matthews_corrcoef, roc_auc_score
 
 
 METRIC_COLUMN_RES = [
@@ -123,6 +124,106 @@ def parse_fold_metric_files(output_dir: Path) -> pd.DataFrame:
     return raw
 
 
+def parse_prediction_files(output_dir: Path) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for predictions_path in sorted(output_dir.glob("fold_*/*/test_predictions.csv")):
+        frame = pd.read_csv(predictions_path)
+        if frame.empty:
+            continue
+        if "fold" not in frame.columns:
+            fold_name = predictions_path.parent.parent.name
+            try:
+                frame["fold"] = int(fold_name.split("_", maxsplit=1)[1])
+            except (IndexError, ValueError):
+                frame["fold"] = pd.NA
+        if "backbone" not in frame.columns:
+            frame["backbone"] = predictions_path.parent.name
+        frame["experiment"] = output_dir.name
+        frame["source_csv"] = str(predictions_path)
+        frames.append(frame)
+
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_prediction_metrics(predictions: pd.DataFrame) -> pd.DataFrame:
+    if predictions.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    grouped_columns = ["experiment", "backbone", "fold"]
+    for keys, group in predictions.groupby(grouped_columns, dropna=False):
+        experiment, backbone, fold = keys
+        rows.append(
+            {
+                "experiment": experiment,
+                "backbone": backbone,
+                "scope": f"fold_{int(fold)}" if pd.notna(fold) else "fold_unknown",
+                "fold": fold,
+                **_metrics_from_prediction_group(group),
+            }
+        )
+
+    for keys, group in predictions.groupby(["experiment", "backbone"], dropna=False):
+        experiment, backbone = keys
+        rows.append(
+            {
+                "experiment": experiment,
+                "backbone": backbone,
+                "scope": "pooled",
+                "fold": pd.NA,
+                **_metrics_from_prediction_group(group),
+            }
+        )
+
+    return pd.DataFrame(rows).sort_values(["experiment", "backbone", "scope"]).reset_index(drop=True)
+
+
+def _metrics_from_prediction_group(group: pd.DataFrame) -> dict[str, object]:
+    labels = pd.to_numeric(group["label"], errors="coerce").astype("Int64")
+    predictions = pd.to_numeric(group["prediction"], errors="coerce").astype("Int64")
+    valid = labels.notna() & predictions.notna()
+    labels = labels[valid].astype(int)
+    predictions = predictions[valid].astype(int)
+    result: dict[str, object] = {
+        "sample_count": int(len(labels)),
+        "positive_count": int((labels == 1).sum()) if len(labels) else 0,
+        "negative_count": int((labels == 0).sum()) if len(labels) else 0,
+    }
+    if labels.empty:
+        result.update({"test_acc": None, "test_f1": None, "test_mcc": None, "test_auc": None})
+        return result
+
+    class_count = int(max(labels.max(), predictions.max())) + 1
+    average = "binary" if class_count == 2 else "macro"
+    result["test_acc"] = float(accuracy_score(labels, predictions))
+    result["test_f1"] = float(f1_score(labels, predictions, average=average, zero_division=0))
+    result["test_mcc"] = float(matthews_corrcoef(labels, predictions))
+    result["test_auc"] = _auc_from_prediction_group(group.loc[valid], labels, class_count)
+    return result
+
+
+def _auc_from_prediction_group(group: pd.DataFrame, labels: pd.Series, class_count: int) -> float | None:
+    if labels.nunique() < 2:
+        return None
+    if class_count == 2 and "score" in group.columns:
+        scores = pd.to_numeric(group["score"], errors="coerce")
+        valid = scores.notna()
+        if valid.sum() and labels[valid].nunique() == 2:
+            return float(roc_auc_score(labels[valid], scores[valid]))
+        return None
+
+    score_columns = sorted(column for column in group.columns if column.startswith("score_"))
+    if len(score_columns) < class_count:
+        return None
+    score_frame = group[score_columns].apply(pd.to_numeric, errors="coerce")
+    valid = score_frame.notna().all(axis=1)
+    if valid.sum() and labels[valid].nunique() == class_count:
+        return float(roc_auc_score(labels[valid], score_frame.loc[valid], multi_class="ovr", average="macro"))
+    return None
+
+
 def _relative_parent(csv_path: Path, output_dir: Path) -> str:
     parent = csv_path.parent
     if parent == output_dir:
@@ -207,13 +308,23 @@ def _mean_or_none(values: pd.Series) -> float | None:
     return float(values.mean())
 
 
-def write_workbook(raw: pd.DataFrame, summary: pd.DataFrame, output_path: Path) -> None:
+def write_workbook(
+    raw: pd.DataFrame,
+    summary: pd.DataFrame,
+    output_path: Path,
+    prediction_metrics: pd.DataFrame | None = None,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         summary.to_excel(writer, sheet_name="summary", index=False)
         raw.sort_values(["experiment", "backbone", "metric"]).to_excel(writer, sheet_name="raw_metrics", index=False)
+        if prediction_metrics is not None and not prediction_metrics.empty:
+            prediction_metrics.to_excel(writer, sheet_name="prediction_metrics", index=False)
 
-        for sheet_name in ("summary", "raw_metrics"):
+        sheet_names = ["summary", "raw_metrics"]
+        if prediction_metrics is not None and not prediction_metrics.empty:
+            sheet_names.append("prediction_metrics")
+        for sheet_name in sheet_names:
             worksheet = writer.sheets[sheet_name]
             worksheet.freeze_panes = "A2"
             worksheet.auto_filter.ref = worksheet.dimensions
@@ -237,8 +348,14 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     raw = parse_metric_exports(output_dir)
     summary = build_summary(raw)
+    predictions = parse_prediction_files(output_dir)
+    prediction_metrics = build_prediction_metrics(predictions)
+    if not predictions.empty:
+        predictions.to_csv(output_dir / "all_test_predictions.csv", index=False)
+    if not prediction_metrics.empty:
+        prediction_metrics.to_csv(output_dir / "prediction_metrics.csv", index=False)
     output_path = output_dir / args.xlsx_name
-    write_workbook(raw, summary, output_path)
+    write_workbook(raw, summary, output_path, prediction_metrics=prediction_metrics)
     print(f"Wrote {output_path}")
 
 

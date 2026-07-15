@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 import hashlib
 import traceback
 import torch
@@ -144,6 +145,60 @@ def mid_slice_plane(depth, h, w):
     ], dtype=float)
 
 
+def remove_overlapping_pseudo_nodule_regions(region_points, region_sizes=None, rng=None, return_indices=False):
+    """
+    Apply the same z-projection overlap rule used for real nodule masks.
+
+    Pseudo nodules are represented as control-point groups, not dense masks, so
+    overlap is measured on the rounded control-point footprint in the y/x plane.
+    """
+    if not region_points:
+        return ([], []) if return_indices else []
+
+    if region_sizes is None:
+        region_sizes = [len(points) for points in region_points]
+
+    if rng is None:
+        sorted_regions = sorted(
+            enumerate(zip(region_points, region_sizes)),
+            key=lambda item: item[1][1],
+            reverse=True,
+        )
+    else:
+        order = rng.permutation(len(region_points))
+        sorted_regions = [(int(idx), (region_points[int(idx)], region_sizes[int(idx)])) for idx in order]
+    kept_indices = []
+    kept_xy = []
+    removed = 0
+
+    for region_idx, (points, size) in sorted_regions:
+        points = np.asarray(points, dtype=float)
+        if points.size == 0:
+            continue
+
+        current_xy = set(map(tuple, np.round(points[:, 1:3]).astype(int)))
+        overlaps = any(current_xy.intersection(previous_xy) for previous_xy in kept_xy)
+        if overlaps:
+            removed += 1
+            print(
+                f"  Pseudo nodule {region_idx} (size={size}) overlaps with a larger "
+                "pseudo nodule in y/x projection. Removing it."
+            )
+            continue
+
+        kept_indices.append(region_idx)
+        kept_xy.append(current_xy)
+
+    if removed > 0:
+        print(f"  Kept {len(kept_indices)} out of {len(region_points)} pseudo nodules after removing overlaps.")
+
+    kept_indices = sorted(kept_indices)
+    kept_regions = [region_points[idx] for idx in kept_indices]
+    if return_indices:
+        return kept_regions, kept_indices
+    return kept_regions
+
+
 def sample_pseudo_regions_inside_lung(
     patient_id,
     lung_mask,
@@ -154,6 +209,7 @@ def sample_pseudo_regions_inside_lung(
     erode_iterations=2,
     central_percentile=70,
     seed_offset=0,
+    return_disks=False,
 ):
     lung_mask = np.asarray(lung_mask) > 0
     if lung_mask.ndim != 3:
@@ -163,7 +219,9 @@ def sample_pseudo_regions_inside_lung(
     lung_points = np.argwhere(lung_mask)
     if len(lung_points) == 0:
         print("Warning: no lung voxels found for pseudo-region sampling.")
-        return np.empty((0, 3), dtype=float)
+        empty_points = np.empty((0, 3), dtype=float)
+        empty_disks = np.empty((0, 4), dtype=float)
+        return (empty_points, empty_disks) if return_disks else empty_points
 
     lung_centroid = lung_points.mean(axis=0)
     print(f"Patient: {patient_id}")
@@ -180,7 +238,9 @@ def sample_pseudo_regions_inside_lung(
     candidate_points = np.argwhere(sampling_mask)
     if len(candidate_points) == 0:
         print("Warning: no lung voxels found for pseudo-region sampling.")
-        return np.empty((0, 3), dtype=float)
+        empty_points = np.empty((0, 3), dtype=float)
+        empty_disks = np.empty((0, 4), dtype=float)
+        return (empty_points, empty_disks) if return_disks else empty_points
     print(f"Candidate voxels: {len(candidate_points)}")
 
     central_percentile = float(np.clip(central_percentile, 1, 100))
@@ -218,22 +278,41 @@ def sample_pseudo_regions_inside_lung(
         [0, 1, 1],
     ], dtype=int)
 
-    control_points = []
+    control_point_regions = []
+    region_sizes = []
+    region_disks = []
     for center in candidate_points[selected_indices]:
         radius = int(rng.integers(min_radius, max_radius + 1))
         points = center + offsets * radius
         points[:, 0] = np.clip(points[:, 0], 0, depth - 1)
         points[:, 1] = np.clip(points[:, 1], 0, h - 1)
         points[:, 2] = np.clip(points[:, 2], 0, w - 1)
+        region_points = []
         for z, y, x in points:
             if lung_mask[z, y, x]:
-                control_points.append([z, y, x])
+                region_points.append([z, y, x])
+        if region_points:
+            control_point_regions.append(np.asarray(region_points, dtype=float))
+            region_sizes.append(radius)
+            region_disks.append([float(center[2]), float(center[1]), float(center[0]), float(radius)])
+
+    control_point_regions, kept_indices = remove_overlapping_pseudo_nodule_regions(
+        control_point_regions,
+        region_sizes=region_sizes,
+        rng=rng,
+        return_indices=True,
+    )
+    control_points = [point for points in control_point_regions for point in points.tolist()]
 
     if not control_points:
         print("Warning: pseudo-regions produced no control points inside the lung mask.")
-        return np.empty((0, 3), dtype=float)
+        empty_points = np.empty((0, 3), dtype=float)
+        empty_disks = np.empty((0, 4), dtype=float)
+        return (empty_points, empty_disks) if return_disks else empty_points
 
-    return np.asarray(control_points, dtype=float)
+    control_points = np.asarray(control_points, dtype=float)
+    disks = np.asarray([region_disks[idx] for idx in kept_indices], dtype=float)
+    return (control_points, disks) if return_disks else control_points
 
 
 def load_empirical_nodule_distribution(distribution_path):
@@ -324,9 +403,12 @@ def sample_empirical_pseudo_nodules(
     min_slice_area_percentile=35,
     position_attempts=100,
     seed_offset=0,
+    return_disks=False,
 ):
     if distribution is None:
-        return np.empty((0, 3), dtype=float)
+        empty_points = np.empty((0, 3), dtype=float)
+        empty_disks = np.empty((0, 4), dtype=float)
+        return (empty_points, empty_disks) if return_disks else empty_points
 
     depth, h, w = volume_shape
     rng = np.random.default_rng(stable_patient_seed(patient_id) + int(seed_offset))
@@ -337,7 +419,9 @@ def sample_empirical_pseudo_nodules(
 
     relative_zyx = distribution["relative_zyx"]
     if len(relative_zyx) == 0 or nodule_count <= 0:
-        return np.empty((0, 3), dtype=float)
+        empty_points = np.empty((0, 3), dtype=float)
+        empty_disks = np.empty((0, 4), dtype=float)
+        return (empty_points, empty_disks) if return_disks else empty_points
 
     min_radius = max(1, int(min_radius))
     max_radius = max(min_radius, int(max_radius))
@@ -350,7 +434,9 @@ def sample_empirical_pseudo_nodules(
         [0, 0, 1],
     ], dtype=float)
 
-    control_points = []
+    control_point_regions = []
+    region_sizes = []
+    region_disks = []
     lung_points = None
     valid_mask = None
     valid_points = None
@@ -429,14 +515,27 @@ def sample_empirical_pseudo_nodules(
                     nearest_idx = np.argmin(np.sum((lung_points - point) ** 2, axis=1))
                     snapped_points.append(lung_points[nearest_idx].astype(float))
             points = np.asarray(snapped_points, dtype=float)
-        control_points.extend(points.tolist())
+        if len(points) > 0:
+            control_point_regions.append(np.asarray(points, dtype=float))
+            region_sizes.append(radius)
+            region_disks.append([float(center[2]), float(center[1]), float(center[0]), float(radius)])
+
+    control_point_regions, kept_indices = remove_overlapping_pseudo_nodule_regions(
+        control_point_regions,
+        region_sizes=region_sizes,
+        rng=rng,
+        return_indices=True,
+    )
+    control_points = [point for points in control_point_regions for point in points.tolist()]
 
     print(
         f"Empirical pseudo-nodules for {patient_id}: {nodule_count} nodules, "
         f"{len(control_points)} control points, "
         f"{accepted_centers} conditioned centers, {fallback_centers} nearest-valid fallbacks."
     )
-    return np.asarray(control_points, dtype=float)
+    control_points = np.asarray(control_points, dtype=float)
+    disks = np.asarray([region_disks[idx] for idx in kept_indices], dtype=float)
+    return (control_points, disks) if return_disks else control_points
 
 
 def fit_surface_grid(
@@ -452,6 +551,9 @@ def fit_surface_grid(
     lung_anchor_erode_iterations=1,
     snap_surface_to_lung=False,
     anchor_min_lung_area_fraction=0.35,
+    surface_method="rbf",
+    shepard_power=2.0,
+    shepard_detections=None,
 ):
     if len(matrix) > 0:
         target_z = np.mean(matrix[:, 0])
@@ -474,24 +576,172 @@ def fit_surface_grid(
     if len(boundary_points) > 0:
         matrix = np.vstack([matrix, boundary_points])
 
-    rbf_spline = Rbf(
-        matrix[:, 2],
-        matrix[:, 1],
-        matrix[:, 0],
-        function='thin_plate',
-        smooth=rbf_smooth,
-    )
-
     x_range = np.arange(w)
     y_range = np.arange(h)
     X, Y = np.meshgrid(x_range, y_range)
 
-    Z_spline_float = rbf_spline(X, Y)
+    surface_method = str(surface_method).strip().lower()
+    if surface_method in {"rbf", "thin_plate", "thin-plate", "tps"}:
+        rbf_spline = Rbf(
+            matrix[:, 2],
+            matrix[:, 1],
+            matrix[:, 0],
+            function='thin_plate',
+            smooth=rbf_smooth,
+        )
+        Z_spline_float = rbf_spline(X, Y)
+    elif surface_method in {"shepard", "modified_shepard", "inverse_distance", "idw"}:
+        detections = surface_points_to_shepard_detections(shepard_detections, matrix)
+        if len(boundary_points) > 0:
+            detections = add_non_overlapping_shepard_anchors(detections, boundary_points)
+        detections = remove_overlapping_shepard_detections(detections)
+        Z_spline_float = detections_to_surface(detections, h, w, p=shepard_power)
+    else:
+        raise ValueError(
+            f"Unsupported surface_method={surface_method!r}. "
+            "Use 'rbf' or 'shepard'."
+        )
+
     Z_spline_float = np.clip(Z_spline_float, 0, depth - 1)
     if snap_surface_to_lung and lung_mask is not None:
         Z_spline_float = snap_surface_to_lung_columns(Z_spline_float, lung_mask)
     Z_spline = np.round(Z_spline_float).astype(int)
     return matrix, point_labels, Z_spline_float, Z_spline
+
+
+def surface_points_to_shepard_detections(shepard_detections, matrix):
+    if shepard_detections is not None:
+        detections = np.asarray(shepard_detections, dtype=float)
+        if detections.size == 0:
+            detections = np.empty((0, 4), dtype=float)
+        if detections.ndim != 2 or detections.shape[1] != 4:
+            raise ValueError(f"shepard_detections must have shape (N, 4), got {detections.shape}")
+        return detections
+
+    matrix = np.asarray(matrix, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[1] != 3 or len(matrix) == 0:
+        raise ValueError("need control points or shepard_detections to build a Shepard surface")
+    return np.column_stack([matrix[:, 2], matrix[:, 1], matrix[:, 0], np.zeros(len(matrix), dtype=float)])
+
+
+def add_non_overlapping_shepard_anchors(detections, boundary_points):
+    detections = np.asarray(detections, dtype=float)
+    boundary_points = np.asarray(boundary_points, dtype=float)
+    if boundary_points.size == 0:
+        return detections
+
+    anchors = np.column_stack(
+        [
+            boundary_points[:, 2],
+            boundary_points[:, 1],
+            boundary_points[:, 0],
+            np.zeros(len(boundary_points), dtype=float),
+        ]
+    )
+    if detections.size == 0:
+        return anchors
+
+    keep = []
+    cx, cy, cr = detections[:, 0], detections[:, 1], detections[:, 3]
+    for anchor in anchors:
+        dist2 = (cx - anchor[0]) ** 2 + (cy - anchor[1]) ** 2
+        if not np.any(dist2 < cr ** 2):
+            keep.append(anchor)
+    if not keep:
+        return detections
+    return np.vstack([detections, np.asarray(keep, dtype=float)])
+
+
+def remove_overlapping_shepard_detections(detections):
+    detections = np.asarray(detections, dtype=float)
+    if detections.ndim != 2 or detections.shape[1] != 4 or len(detections) <= 1:
+        return detections
+
+    kept = []
+    removed = 0
+    for idx, detection in enumerate(detections):
+        x, y, _z, radius = detection
+        overlaps = False
+        for kept_detection in kept:
+            kept_x, kept_y, _kept_z, kept_radius = kept_detection
+            center_dist2 = (x - kept_x) ** 2 + (y - kept_y) ** 2
+            radius_sum = radius + kept_radius
+            if center_dist2 < radius_sum ** 2:
+                overlaps = True
+                removed += 1
+                print(
+                    "Warning: skipping overlapping Shepard disk "
+                    f"{idx} at ({x:.1f}, {y:.1f}) r={radius:.1f}; "
+                    f"overlaps kept disk at ({kept_x:.1f}, {kept_y:.1f}) r={kept_radius:.1f}."
+                )
+                break
+        if not overlaps:
+            kept.append(detection)
+
+    if removed > 0:
+        print(f"Kept {len(kept)} out of {len(detections)} Shepard disks after removing overlaps.")
+    return np.asarray(kept, dtype=float)
+
+
+def detections_to_surface(detections, height, width, p=2.0):
+    """
+    Build a depth surface from circular detections via modified Shepard
+    interpolation. Each row is (x, y, z, r).
+    """
+    det = np.asarray(detections, dtype=float)
+    if det.ndim != 2 or det.shape[1] != 4:
+        raise ValueError(f"detections must have shape (N, 4), got {det.shape}")
+    n = det.shape[0]
+    if n == 0:
+        raise ValueError("need at least one detection")
+
+    cx, cy, cz, cr = det[:, 0], det[:, 1], det[:, 2], det[:, 3]
+    if np.any(cr < 0):
+        raise ValueError("radii must be non-negative")
+    p = float(p)
+    if p <= 0:
+        raise ValueError("Shepard power p must be positive")
+
+    dcx = cx[:, None] - cx[None, :]
+    dcy = cy[:, None] - cy[None, :]
+    center_dist2 = dcx * dcx + dcy * dcy
+    radsum = cr[:, None] + cr[None, :]
+    overlap = center_dist2 < radsum * radsum
+    np.fill_diagonal(overlap, False)
+    if overlap.any():
+        i, j = map(int, np.argwhere(overlap)[0])
+        raise ValueError(
+            f"detections {i} and {j} overlap in (x, y): "
+            f"centres ({cx[i]}, {cy[i]}) r={cr[i]} and "
+            f"({cx[j]}, {cy[j]}) r={cr[j]}"
+        )
+
+    xs = np.arange(width)
+    ys = np.arange(height)
+    xx, yy = np.meshgrid(xs, ys)
+
+    num = np.zeros((height, width), dtype=float)
+    den = np.zeros((height, width), dtype=float)
+    inside_any = np.zeros((height, width), dtype=bool)
+    z_inside = np.empty((height, width), dtype=float)
+
+    for k in range(n):
+        d = np.hypot(xx - cx[k], yy - cy[k])
+        inside_k = d <= cr[k]
+        z_inside[inside_k] = cz[k]
+        inside_any |= inside_k
+
+        e = d - cr[k]
+        out = ~inside_k
+        w_i = np.zeros((height, width), dtype=float)
+        w_i[out] = e[out] ** (-p)
+        num += w_i * cz[k]
+        den += w_i
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        Z = num / den
+    Z[inside_any] = z_inside[inside_any]
+    return Z
 
 
 def snap_surface_to_lung_columns(Z_spline_float, lung_mask):
@@ -855,7 +1105,29 @@ class LUNA16NiftiDataset(Dataset):
 
         return tuple(outputs)
 
-def remove_overlapping_nodules(labeled_mask, num_features):
+def parse_nodule_malignancies(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, np.ndarray)):
+        values = value
+    else:
+        if pd.isna(value):
+            return []
+        try:
+            values = ast.literal_eval(str(value))
+        except (ValueError, SyntaxError):
+            return []
+    malignancies = []
+    for item in values:
+        try:
+            if pd.notna(item):
+                malignancies.append(float(item))
+        except (TypeError, ValueError):
+            continue
+    return malignancies
+
+
+def remove_overlapping_nodules(labeled_mask, num_features, nodule_malignancies=None):
     """
     Remove smaller nodules when they overlap with larger ones.
     
@@ -876,8 +1148,22 @@ def remove_overlapping_nodules(labeled_mask, num_features):
         volume = np.sum(labeled_mask == label_id)
         nodule_volumes[label_id] = volume
     
-    # Sort nodules by volume (largest first)
-    sorted_nodules = sorted(nodule_volumes.items(), key=lambda x: x[1], reverse=True)
+    nodule_malignancies = nodule_malignancies or []
+    if len(nodule_malignancies) >= num_features:
+        nodule_scores = {
+            label_id: float(nodule_malignancies[label_id - 1])
+            for label_id in range(1, num_features + 1)
+        }
+        sorted_nodules = sorted(
+            nodule_volumes.items(),
+            key=lambda item: (nodule_scores[item[0]], item[1]),
+            reverse=True,
+        )
+        score_name = "malignancy"
+    else:
+        nodule_scores = nodule_volumes
+        sorted_nodules = sorted(nodule_volumes.items(), key=lambda x: x[1], reverse=True)
+        score_name = "volume"
     
     # Track which nodules to keep
     kept_labels = []
@@ -896,7 +1182,12 @@ def remove_overlapping_nodules(labeled_mask, num_features):
             intersection = np.logical_and(current_nodule_mask_xy, kept_nodule_mask_xy)
             if np.any(intersection):
                 overlaps = True
-                print(f"  Nodule {label_id} (volume={volume}) overlaps with nodule {kept_label} (volume={nodule_volumes[kept_label]}). Removing smaller nodule {label_id}.")
+                print(
+                    f"  Nodule {label_id} ({score_name}={nodule_scores[label_id]}, volume={volume}) "
+                    f"overlaps with nodule {kept_label} "
+                    f"({score_name}={nodule_scores[kept_label]}, volume={nodule_volumes[kept_label]}). "
+                    f"Removing nodule {label_id}."
+                )
                 break
         
         if not overlaps:
@@ -932,6 +1223,8 @@ def save_surfaces(save_path, dataset, cfg):
     min_lung_coverage = saliency_cfg.get("min_lung_coverage", 0.25)
     pseudo_max_attempts = saliency_cfg.get("pseudo_max_attempts", 5)
     rbf_smooth = saliency_cfg.get("rbf_smooth", 0.1)
+    surface_method = saliency_cfg.get("surface_method", "rbf")
+    shepard_power = saliency_cfg.get("shepard_power", 2.0)
     min_best_lung_coverage = saliency_cfg.get("min_best_lung_coverage", 0.10)
     use_lung_volume_anchors = saliency_cfg.get("use_lung_volume_anchors", True)
     lung_anchor_erode_iterations = saliency_cfg.get("lung_anchor_erode_iterations", 1)
@@ -960,6 +1253,7 @@ def save_surfaces(save_path, dataset, cfg):
     for k in range(len(dataset)):
         try:
             sample = dataset[k]
+            row = dataset.data_frame.iloc[k] if hasattr(dataset, "data_frame") else None
             if len(sample) == 5:
                 img, label, patient_id, mask, saved_lung_mask = sample
             elif len(sample) == 4:
@@ -997,6 +1291,7 @@ def save_surfaces(save_path, dataset, cfg):
                 continue
 
             matrix = None
+            shepard_detections = None
             Z_spline = None
             if mask is not None: # and label.item() == 1:
                 # Malignant case with mask: Use centroids of each separate nodule
@@ -1006,12 +1301,22 @@ def save_surfaces(save_path, dataset, cfg):
                 labeled_mask, num_features = nd_label(mask_np)
                 
                 if num_features > 0:
-                    # Remove overlapping nodules (keep only the larger ones)
+                    # Remove projected-overlapping nodules, preferring higher malignancy when available.
                     print(f"Found {num_features} nodules for patient {patient_id}")
-                    labeled_mask, kept_labels = remove_overlapping_nodules(labeled_mask, num_features)
+                    nodule_malignancies = parse_nodule_malignancies(
+                        row.get("nodule_annotation_mean_malignancies")
+                        if hasattr(row, "get")
+                        else None
+                    )
+                    labeled_mask, kept_labels = remove_overlapping_nodules(
+                        labeled_mask,
+                        num_features,
+                        nodule_malignancies=nodule_malignancies,
+                    )
                     
                     # Calculate center of mass for each remaining labeled feature
                     matrix_list = []
+                    disk_list = []
                     for label_id in kept_labels:
                         # 1. Isola la maschera del singolo nodulo
                         nodule_mask = (labeled_mask == label_id)
@@ -1032,8 +1337,18 @@ def save_surfaces(save_path, dataset, cfg):
                         points_to_add = [[best_z, np.mean(y_coords_at_z), np.mean(x_coords_at_z)]]
                         points_to_add.extend([[best_z, y, x] for y, x in contour_points])
                         matrix_list.extend(points_to_add)
+                        disk_radius = float(np.sqrt(max(len(y_coords_at_z), 1) / np.pi))
+                        disk_list.append(
+                            [
+                                float(np.mean(x_coords_at_z)),
+                                float(np.mean(y_coords_at_z)),
+                                float(best_z),
+                                disk_radius,
+                            ]
+                        )
 
                     matrix = np.array(matrix_list)
+                    shepard_detections = np.asarray(disk_list, dtype=float)
                     print(f"Using {len(matrix)} nodule centers from mask.")
                 else:
                     print(f"Warning: No nodules found in mask for {patient_id}.")
@@ -1059,7 +1374,7 @@ def save_surfaces(save_path, dataset, cfg):
                 for attempt in range(pseudo_max_attempts):
                     print(f"Attempt: {attempt + 1}/{pseudo_max_attempts}")
                     if empirical_distribution is not None:
-                        candidate_matrix = sample_empirical_pseudo_nodules(
+                        candidate_matrix, candidate_shepard_detections = sample_empirical_pseudo_nodules(
                             patient_id,
                             volume_np.shape,
                             empirical_distribution,
@@ -1071,9 +1386,10 @@ def save_surfaces(save_path, dataset, cfg):
                             min_slice_area_percentile=pseudo_min_slice_area_percentile,
                             position_attempts=pseudo_empirical_position_attempts,
                             seed_offset=attempt,
+                            return_disks=True,
                         )
                     else:
-                        candidate_matrix = sample_pseudo_regions_inside_lung(
+                        candidate_matrix, candidate_shepard_detections = sample_pseudo_regions_inside_lung(
                             patient_id,
                             lung_mask,
                             min_regions=pseudo_min_regions,
@@ -1083,6 +1399,7 @@ def save_surfaces(save_path, dataset, cfg):
                             erode_iterations=pseudo_erode_iterations,
                             central_percentile=pseudo_central_percentile,
                             seed_offset=attempt,
+                            return_disks=True,
                         )
                     if len(candidate_matrix) == 0:
                         print("Rejected: no pseudo-region control points.")
@@ -1101,6 +1418,9 @@ def save_surfaces(save_path, dataset, cfg):
                         lung_anchor_erode_iterations=lung_anchor_erode_iterations,
                         snap_surface_to_lung=snap_surface_to_lung,
                         anchor_min_lung_area_fraction=anchor_min_lung_area_fraction,
+                        surface_method=surface_method,
+                        shepard_power=shepard_power,
+                        shepard_detections=candidate_shepard_detections,
                     )
                     lung_coverage = compute_lung_coverage(candidate_Z_spline, lung_mask)
                     print(f"Lung coverage: {lung_coverage:.3f}")
@@ -1111,11 +1431,13 @@ def save_surfaces(save_path, dataset, cfg):
                             point_labels,
                             candidate_Z_spline_float,
                             candidate_Z_spline,
+                            candidate_shepard_detections,
                         )
                     if lung_coverage >= min_lung_coverage:
                         print("Accepted")
                         matrix = candidate_matrix
                         point_labels = point_labels
+                        shepard_detections = candidate_shepard_detections
                         Z_spline_float = candidate_Z_spline_float
                         Z_spline = candidate_Z_spline
                         break
@@ -1127,10 +1449,11 @@ def save_surfaces(save_path, dataset, cfg):
                             f"Warning: no attempt reached min_lung_coverage={min_lung_coverage:.3f}; "
                             f"using best attempt with lung coverage {best_lung_coverage:.3f}."
                         )
-                        matrix, point_labels, Z_spline_float, Z_spline = best_candidate
+                        matrix, point_labels, Z_spline_float, Z_spline, shepard_detections = best_candidate
                     else:
                         print(f"Warning: falling back to mid-slice plane for {patient_id}.")
                         matrix = mid_slice_plane(img.shape[0], h, w)
+                        shepard_detections = None
 
             if Z_spline is None:
                 if use_lung_volume_anchors and lung_mask is None:
@@ -1158,6 +1481,9 @@ def save_surfaces(save_path, dataset, cfg):
                     lung_anchor_erode_iterations=lung_anchor_erode_iterations,
                     snap_surface_to_lung=snap_surface_to_lung,
                     anchor_min_lung_area_fraction=anchor_min_lung_area_fraction,
+                    surface_method=surface_method,
+                    shepard_power=shepard_power,
+                    shepard_detections=shepard_detections,
                 )
             if save_surface_grid:
                 if save_surface_grid:

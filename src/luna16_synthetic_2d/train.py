@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytorch_lightning as pl
+import pandas as pd
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 
@@ -155,6 +156,16 @@ def save_test_metrics(test_results: list[dict[str, object]], output_dir: Path) -
         json.dump(serializable_metrics, handle, indent=2)
 
 
+def save_test_predictions(model: SyntheticLuna16Classifier, output_dir: Path, args: argparse.Namespace) -> None:
+    rows = getattr(model, "test_prediction_rows", [])
+    if not rows:
+        return
+    predictions = pd.DataFrame(rows)
+    predictions.insert(0, "backbone", args.backbone)
+    predictions.insert(0, "fold", args.fold)
+    predictions.to_csv(output_dir / "test_predictions.csv", index=False)
+
+
 def main() -> None:
     args = parse_args()
     pl.seed_everything(args.seed, workers=True)
@@ -185,7 +196,7 @@ def main() -> None:
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=output_dir / "checkpoints",
-        filename="{epoch:03d}-{val_loss:.4f}-{val_auc:.4f}",
+        filename="{epoch:03d}-{val_loss:.4f}-{val_auc:.4f}-{val_mcc:.4f}",
         monitor=args.monitor,
         mode="min" if args.monitor == "val_loss" else "max",
         save_top_k=1,
@@ -214,6 +225,7 @@ def main() -> None:
         model = SyntheticLuna16Classifier.load_from_checkpoint(args.eval_only, pretrained=False)
         test_results = trainer.test(model=model, datamodule=datamodule)
         save_test_metrics(test_results, output_dir)
+        save_test_predictions(model, output_dir, args)
         return
 
     model = SyntheticLuna16Classifier(
@@ -234,6 +246,7 @@ def main() -> None:
     trainer.fit(model=model, datamodule=datamodule)
     test_results = trainer.test(model=model, datamodule=datamodule, ckpt_path="best")
     save_test_metrics(test_results, output_dir)
+    save_test_predictions(model, output_dir, args)
 
 
 if __name__ == "__main__":

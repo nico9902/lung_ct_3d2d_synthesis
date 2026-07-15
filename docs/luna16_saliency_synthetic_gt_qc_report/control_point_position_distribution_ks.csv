@@ -1,7 +1,7 @@
 sample_level,axis,ks_distance
-control_points,rel_z,0.09987412222731729
-control_points,rel_y,0.1311352676551069
-control_points,rel_x,0.09448085908582765
-region_centers,rel_z,0.10235361464018433
-region_centers,rel_y,0.14453465684820044
-region_centers,rel_x,0.09989450243813255
+control_points,rel_z,0.18605573987657983
+control_points,rel_y,0.04151658739364077
+control_points,rel_x,0.10139814240372598
+region_centers,rel_z,0.18534902609566112
+region_centers,rel_y,0.050659809325145286
+region_centers,rel_x,0.11119353108132003

@@ -1,4 +1,4 @@
-region_count,scan_count,probability,group
+nodule_count,scan_count,probability,source
 1,310,0.5158069883527454,with_nodules_real_nodule_count
 2,159,0.26455906821963393,with_nodules_real_nodule_count
 3,63,0.1048252911813644,with_nodules_real_nodule_count

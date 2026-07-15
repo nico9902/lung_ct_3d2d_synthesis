@@ -1,4 +1,4 @@
-region_count,scan_count,probability,group
+nodule_count,scan_count,probability,source
 1,142,0.49477351916376305,without_nodules_generated_pseudo_regions
 2,85,0.2961672473867596,without_nodules_generated_pseudo_regions
 3,32,0.11149825783972125,without_nodules_generated_pseudo_regions

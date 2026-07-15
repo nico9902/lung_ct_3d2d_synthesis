@@ -51,7 +51,7 @@ class SyntheticLuna16Classifier(pl.LightningModule):
         return self.model(images)
 
     def _shared_step(self, batch, stage: str) -> torch.Tensor:
-        images, labels, _ = batch
+        images, labels, sample_ids = batch
         logits = self(images)
         if self.hparams.num_classes == 2:
             logits = logits.squeeze(1)
@@ -68,6 +68,7 @@ class SyntheticLuna16Classifier(pl.LightningModule):
             "labels": labels.detach().cpu(),
             "predictions": predictions.detach().cpu(),
             "scores": scores.detach().cpu(),
+            "sample_ids": [str(sample_id) for sample_id in sample_ids],
         }
         if stage == "train":
             self.train_outputs.append(output)
@@ -125,6 +126,45 @@ class SyntheticLuna16Classifier(pl.LightningModule):
             )
             print(confusion_matrix(labels, predictions, labels=class_indices))
 
+    def _prediction_rows(self, outputs: list[dict[str, torch.Tensor]], stage: str) -> list[dict[str, object]]:
+        if not outputs:
+            return []
+        labels = torch.cat([item["labels"] for item in outputs]).numpy()
+        predictions = torch.cat([item["predictions"] for item in outputs]).numpy()
+        scores = torch.cat([item["scores"] for item in outputs]).numpy()
+        sample_ids = [sample_id for item in outputs for sample_id in item["sample_ids"]]
+
+        rows: list[dict[str, object]] = []
+        if self.hparams.num_classes == 2:
+            for sample_id, label, prediction, score in zip(sample_ids, labels, predictions, scores):
+                rows.append(
+                    {
+                        "sample_id": sample_id,
+                        "split": stage,
+                        "label": int(label),
+                        "label_name": self.hparams.class_names[int(label)],
+                        "prediction": int(prediction),
+                        "prediction_name": self.hparams.class_names[int(prediction)],
+                        "score": float(score),
+                    }
+                )
+            return rows
+
+        for sample_index, (sample_id, label, prediction) in enumerate(zip(sample_ids, labels, predictions)):
+            row = {
+                "sample_id": sample_id,
+                "split": stage,
+                "label": int(label),
+                "label_name": self.hparams.class_names[int(label)],
+                "prediction": int(prediction),
+                "prediction_name": self.hparams.class_names[int(prediction)],
+                "score": float(scores[sample_index, int(prediction)]),
+            }
+            for class_index, class_name in enumerate(self.hparams.class_names):
+                row[f"score_{class_name}"] = float(scores[sample_index, class_index])
+            rows.append(row)
+        return rows
+
     def on_train_epoch_end(self) -> None:
         self._compute_epoch_metrics(self.train_outputs, "train")
         self.train_outputs.clear()
@@ -135,6 +175,7 @@ class SyntheticLuna16Classifier(pl.LightningModule):
 
     def on_test_epoch_end(self) -> None:
         self._compute_epoch_metrics(self.test_outputs, "test")
+        self.test_prediction_rows = self._prediction_rows(self.test_outputs, "test")
         self.test_outputs.clear()
 
     def configure_optimizers(self):

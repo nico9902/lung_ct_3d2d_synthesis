@@ -16,7 +16,9 @@ saliency:
   debug: false
   show_plot: false
   save_surface_grid: true
+  surface_method: "rbf"
   rbf_smooth: 0.1
+  shepard_power: 2.0
   num_boundary_anchors: 24
   use_lung_volume_anchors: true
   lung_anchor_erode_iterations: 1

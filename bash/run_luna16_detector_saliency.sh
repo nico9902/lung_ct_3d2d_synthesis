@@ -21,11 +21,13 @@ CSV_FILE_PREFIX="${CSV_FILE_PREFIX:-${SPLITS_DIR}/luna16_classification_fold}"
 CSV_FILE_SUFFIX="${CSV_FILE_SUFFIX:-.csv}"
 PRED_ROOT="${PRED_ROOT:-outputs/scpmnet_luna16_10fold}"
 PREDICTION_NAME="${PREDICTION_NAME:-test_predictions.csv}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/luna16_saliency_synthetic_detector_top5}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-data/luna16_saliency_synthetic_detector_top5_minprob0.5_no_contour}"
 TOP_K="${TOP_K:-5}"
-NUM_CONTOUR_POINTS="${NUM_CONTOUR_POINTS:-4}"
-MIN_PROBABILITY="${MIN_PROBABILITY:-}"
+NUM_CONTOUR_POINTS="${NUM_CONTOUR_POINTS:-0}"
+MIN_PROBABILITY="${MIN_PROBABILITY:-0.5}"
+SURFACE_METHOD="${SURFACE_METHOD:-rbf}"
 RBF_SMOOTH="${RBF_SMOOTH:-0.1}"
+SHEPARD_POWER="${SHEPARD_POWER:-2.0}"
 NUM_BOUNDARY_ANCHORS="${NUM_BOUNDARY_ANCHORS:-24}"
 USE_LUNG_VOLUME_ANCHORS="${USE_LUNG_VOLUME_ANCHORS:-true}"
 LUNG_ANCHOR_ERODE_ITERATIONS="${LUNG_ANCHOR_ERODE_ITERATIONS:-1}"
@@ -42,9 +44,24 @@ LUNGMASK_MODEL_NAME="${LUNGMASK_MODEL_NAME:-R231}"
 LUNGMASK_FORCE_CPU="${LUNGMASK_FORCE_CPU:-false}"
 LUNG_WINDOW_CENTER="${LUNG_WINDOW_CENTER:--600}"
 LUNG_WINDOW_WIDTH="${LUNG_WINDOW_WIDTH:-1500}"
+FALLBACK_NO_NODULE="${FALLBACK_NO_NODULE:-true}"
 FALLBACK_MID_SLICE="${FALLBACK_MID_SLICE:-false}"
+SKIP_EXISTING="${SKIP_EXISTING:-true}"
 REPORT_LUNG_COVERAGE="${REPORT_LUNG_COVERAGE:-true}"
 SAVE_SURFACE_GRID="${SAVE_SURFACE_GRID:-true}"
+PSEUDO_MIN_REGIONS="${PSEUDO_MIN_REGIONS:-1}"
+PSEUDO_MAX_REGIONS="${PSEUDO_MAX_REGIONS:-3}"
+PSEUDO_MIN_RADIUS="${PSEUDO_MIN_RADIUS:-8}"
+PSEUDO_MAX_RADIUS="${PSEUDO_MAX_RADIUS:-20}"
+PSEUDO_ERODE_ITERATIONS="${PSEUDO_ERODE_ITERATIONS:-2}"
+PSEUDO_CENTRAL_PERCENTILE="${PSEUDO_CENTRAL_PERCENTILE:-70}"
+PSEUDO_MIN_SLICE_AREA_PERCENTILE="${PSEUDO_MIN_SLICE_AREA_PERCENTILE:-35}"
+PSEUDO_EMPIRICAL_POSITION_ATTEMPTS="${PSEUDO_EMPIRICAL_POSITION_ATTEMPTS:-100}"
+PSEUDO_MAX_ATTEMPTS="${PSEUDO_MAX_ATTEMPTS:-5}"
+MIN_LUNG_COVERAGE="${MIN_LUNG_COVERAGE:-0.25}"
+MIN_BEST_LUNG_COVERAGE="${MIN_BEST_LUNG_COVERAGE:-0.10}"
+EMPIRICAL_NODULE_DISTRIBUTION_PATH="${EMPIRICAL_NODULE_DISTRIBUTION_PATH:-outputs/luna16_saliency_control_point_distribution/empirical_nodule_distribution_from_control_points.npz}"
+USE_EMPIRICAL_PSEUDO_NODULES="${USE_EMPIRICAL_PSEUDO_NODULES:-true}"
 
 export MPLBACKEND="${MPLBACKEND:-Agg}"
 
@@ -63,6 +80,12 @@ for FOLD in ${FOLDS}; do
   fi
   if [ "${FALLBACK_MID_SLICE}" = "true" ]; then
     EXTRA_ARGS+=(--fallback-mid-slice)
+  fi
+  if [ "${FALLBACK_NO_NODULE}" = "true" ]; then
+    EXTRA_ARGS+=(--fallback-no-nodule)
+  fi
+  if [ "${SKIP_EXISTING}" = "true" ]; then
+    EXTRA_ARGS+=(--skip-existing)
   fi
   if [ "${REPORT_LUNG_COVERAGE}" = "true" ]; then
     EXTRA_ARGS+=(--report-lung-coverage)
@@ -90,12 +113,21 @@ for FOLD in ${FOLDS}; do
   else
     EXTRA_ARGS+=(--no-lungmask-force-cpu)
   fi
+  if [ "${USE_EMPIRICAL_PSEUDO_NODULES}" = "true" ]; then
+    EXTRA_ARGS+=(--use-empirical-pseudo-nodules)
+  else
+    EXTRA_ARGS+=(--no-use-empirical-pseudo-nodules)
+  fi
 
   echo "Generating detector-driven LUNA16 saliency surfaces for fold ${FOLD}"
   echo "  CSV: ${CSV_FILE}"
   echo "  Detector root: ${PRED_ROOT}"
   echo "  Split: ${SPLIT}"
   echo "  Top-k: ${TOP_K}"
+  echo "  Min probability: ${MIN_PROBABILITY:-none}"
+  echo "  Surface method: ${SURFACE_METHOD}"
+  echo "  Detector-negative fallback: ${FALLBACK_NO_NODULE}"
+  echo "  Skip existing: ${SKIP_EXISTING}"
   echo "  Control points per detection: $((1 + NUM_CONTOUR_POINTS))"
   echo "  Output: ${OUTPUT_ROOT}"
 
@@ -109,7 +141,9 @@ for FOLD in ${FOLDS}; do
     --save-path "${OUTPUT_ROOT}" \
     --top-k "${TOP_K}" \
     --num-contour-points "${NUM_CONTOUR_POINTS}" \
+    --surface-method "${SURFACE_METHOD}" \
     --rbf-smooth "${RBF_SMOOTH}" \
+    --shepard-power "${SHEPARD_POWER}" \
     --num-boundary-anchors "${NUM_BOUNDARY_ANCHORS}" \
     --lung-anchor-erode-iterations "${LUNG_ANCHOR_ERODE_ITERATIONS}" \
     --anchor-min-lung-area-fraction "${ANCHOR_MIN_LUNG_AREA_FRACTION}" \
@@ -122,6 +156,18 @@ for FOLD in ${FOLDS}; do
     --lungmask-model-name "${LUNGMASK_MODEL_NAME}" \
     --lung-window-center "${LUNG_WINDOW_CENTER}" \
     --lung-window-width "${LUNG_WINDOW_WIDTH}" \
+    --pseudo-min-regions "${PSEUDO_MIN_REGIONS}" \
+    --pseudo-max-regions "${PSEUDO_MAX_REGIONS}" \
+    --pseudo-min-radius "${PSEUDO_MIN_RADIUS}" \
+    --pseudo-max-radius "${PSEUDO_MAX_RADIUS}" \
+    --pseudo-erode-iterations "${PSEUDO_ERODE_ITERATIONS}" \
+    --pseudo-central-percentile "${PSEUDO_CENTRAL_PERCENTILE}" \
+    --pseudo-min-slice-area-percentile "${PSEUDO_MIN_SLICE_AREA_PERCENTILE}" \
+    --pseudo-empirical-position-attempts "${PSEUDO_EMPIRICAL_POSITION_ATTEMPTS}" \
+    --pseudo-max-attempts "${PSEUDO_MAX_ATTEMPTS}" \
+    --min-lung-coverage "${MIN_LUNG_COVERAGE}" \
+    --min-best-lung-coverage "${MIN_BEST_LUNG_COVERAGE}" \
+    --empirical-nodule-distribution-path "${EMPIRICAL_NODULE_DISTRIBUTION_PATH}" \
     "${EXTRA_ARGS[@]}" \
     "$@"
 done

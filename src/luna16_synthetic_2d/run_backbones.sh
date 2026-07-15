@@ -12,8 +12,8 @@ elif [ -f "venv/bin/activate" ]; then
   source venv/bin/activate
 fi
 
-OUTPUT_DIR="${OUTPUT_DIR:-outputs/luna16_synthetic_2d_half_backbone_gt}"
-SYNTHETIC_IMAGES_DIR="${SYNTHETIC_IMAGES_DIR:-outputs/luna16_saliency_synthetic_gt}"
+OUTPUT_DIR="${OUTPUT_DIR:-outputs/luna16_synthetic_2d_gt_no_contour}"
+SYNTHETIC_IMAGES_DIR="${SYNTHETIC_IMAGES_DIR:-data/luna16_saliency_synthetic_gt_no_contour}"
 SPLITS_DIR="${SPLITS_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cv_splits}"
 FOLDS="${FOLDS:-0 1 2 3 4 5 6 7 8 9}"
 BACKBONES="${BACKBONES:-vgg16 efficientnet_b0 efficientnet_b1 efficientnet_v2_s resnet18 resnet50 densenet121}"
@@ -25,13 +25,14 @@ IMAGE_WIDTH="${IMAGE_WIDTH:-384}"
 ACCELERATOR="${ACCELERATOR:-auto}"
 DEVICES="${DEVICES:-[3]}"
 ACCUMULATE_GRAD_BATCHES="${ACCUMULATE_GRAD_BATCHES:-1}"
+MONITOR="${MONITOR:-val_mcc}"
 WANDB="${WANDB:-1}"
-WANDB_PROJECT="${WANDB_PROJECT:-luna16-synthetic-2d-gt}"
+WANDB_PROJECT="${WANDB_PROJECT:-luna16-synthetic-2d-gt-no-contour}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"
 WANDB_OFFLINE="${WANDB_OFFLINE:-0}"
 WANDB_LOG_MODEL="${WANDB_LOG_MODEL:-0}"
 FREEZE_BACKBONE="${FREEZE_BACKBONE:-0}"
-FREEZE_HALF_BACKBONE="${FREEZE_HALF_BACKBONE:-1}"
+FREEZE_HALF_BACKBONE="${FREEZE_HALF_BACKBONE:-0}"
 FREEZE_FIRST_LAYERS="${FREEZE_FIRST_LAYERS:-0}"
 UNFREEZE_LAST_LAYERS="${UNFREEZE_LAST_LAYERS:-0}"
 EXPORT_BACKBONE_SUMMARY="${EXPORT_BACKBONE_SUMMARY:-1}"
@@ -81,7 +82,8 @@ for FOLD in ${FOLDS}; do
       --accelerator "${ACCELERATOR}" \
       --devices "${DEVICES}" \
       --accumulate-grad-batches "${ACCUMULATE_GRAD_BATCHES}" \
-      --wandb-group "${BACKBONE}_half_backbone_gt" \
+      --monitor "${MONITOR}" \
+      --wandb-group "${BACKBONE}_gt" \
       "${EXTRA_ARGS[@]}"
   done
 done
