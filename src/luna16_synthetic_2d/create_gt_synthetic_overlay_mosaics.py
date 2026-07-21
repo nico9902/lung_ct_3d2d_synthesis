@@ -108,8 +108,8 @@ def make_tile(
         int(round((y_max + 1 - y0) * scale)),
     )
 
-    component = labeled_mask == component_idx
-    mask_crop = crop_with_padding(component[z].astype(np.uint8), y0, y1, x0, x1, fill=0).astype(bool)
+    full_mask = labeled_mask > 0
+    mask_crop = crop_with_padding(full_mask[z].astype(np.uint8), y0, y1, x0, x1, fill=0).astype(bool)
     gt_crop = crop_with_padding(window_to_uint8(volume[z], window_center, window_width), y0, y1, x0, x1, fill=0)
     rbf_crop = crop_with_padding(rbf_surface, y0, y1, x0, x1, fill=0)
     shepard_crop = crop_with_padding(shepard_surface, y0, y1, x0, x1, fill=0)

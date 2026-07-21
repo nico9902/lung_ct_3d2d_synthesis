@@ -108,6 +108,8 @@ def main() -> None:
     parser.add_argument("--output-root", type=Path, default=Path("outputs/scpmnet_luna16_10fold"))
     parser.add_argument("--split-dir", type=Path, default=Path("data/LUNA16_preprocessed/cv_splits"))
     parser.add_argument("--fold-glob", default="scpmnet_paper_luna16_fold*")
+    parser.add_argument("--prediction-name", default="test_predictions.csv")
+    parser.add_argument("--froc-name", default="test_froc.csv")
     parser.add_argument("--score-col", default="probability")
     parser.add_argument("--out-dir", type=Path, default=None)
     args = parser.parse_args()
@@ -126,8 +128,8 @@ def main() -> None:
 
     for fold_dir in fold_dirs:
         fold = fold_index(fold_dir)
-        froc_path = fold_dir / "predictions" / "test_froc.csv"
-        pred_path = fold_dir / "predictions" / "test_predictions.csv"
+        froc_path = fold_dir / "predictions" / args.froc_name
+        pred_path = fold_dir / "predictions" / args.prediction_name
         split_path = args.split_dir / f"luna16_fold{fold}.csv"
 
         froc = pd.read_csv(froc_path)

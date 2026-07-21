@@ -1,13 +1,17 @@
-1. Generare sintetiche per gli altri punti di lavoro (topk=4, topk=3) considerando una soglia di 0,5.
-   - Motivazione: prima va completato il dataset sperimentale mancante, altrimenti le analisi successive restano parziali.
+1. [COMPLETATO] Migliorare la visualizzazione del mosaico.
+   - Generati JPEG per campione in `docs/luna16_synthetic_2d_gradcam_comparison_mosaics_predicted_detection_jpegs/sample_jpegs/`
+   - Inserite immagini con le detection predette (contorni) per ogni top-k nel report:
+     `docs/luna16_synthetic_2d_gradcam_comparison_mosaics_predicted_detection_jpegs/comparison_mosaic_report.md`
+   - Generate le slice CT corrispondenti alle singole detection per Top3/Top4/Top5/Top7:
+     `docs/luna16_synthetic_2d_detection_slice_mosaics/detection_slice_mosaic_report.md`
+   - Generate le slice CT delle detection con Grad-CAM e predizione classificativa:
+     `docs/luna16_synthetic_2d_detection_slice_gradcam_mosaics/detection_slice_mosaic_report.md`
+   - Generate le slice CT colorizzate, con Grad-CAM e predizione classificativa per tutti i 796 campioni:
+     `docs/luna16_synthetic_2d_detection_slice_gradcam_mosaics_all_color/detection_slice_mosaic_report.md`
+   - Generate le slice CT in scala di grigi standard, con Grad-CAM e categorie richieste
+     (`both_wrong`, `both_correct`, `gt_correct_top5_wrong`, `gt_wrong_top5_correct`,
+     `top5_false_positive`, `top5_true_positive`):
+     `docs/luna16_synthetic_2d_detection_slice_gradcam_mosaics_classified_gray/detection_slice_mosaic_report.md`
 
-2. Ordinare le classificazioni sintetiche per classe su tutti gli esperimenti.
-   - Motivazione: una volta generati tutti gli esperimenti, conviene uniformare gli output per classe prima di fare interpretabilita' e confronti visivi.
-
-3. Eseguire GRADCAM sugli ultimi esperimenti, partendo dal punto di lavoro all'80%.
-   - Motivazione: le mappe GradCAM hanno senso dopo che classificazioni e predizioni sono organizzate, cosi' si possono selezionare facilmente casi corretti/errati e classi.
-
-4. Migliorare la visualizzazione del mosaico.
-   - Aggiungere una riga con box e una senza.
-   - Aggiungere una riga con i riquadri dei detector.
-   - Motivazione: il mosaico dovrebbe essere l'ultimo passo, per integrare sintetiche, classi ordinate, detector e GradCAM in una visualizzazione finale coerente.
+2. FPR su detector
+3. Rigenerare punti di lavoro con topk e threshold

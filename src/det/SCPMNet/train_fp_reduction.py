@@ -194,7 +194,8 @@ def main() -> None:
         monitor="val/loss",
         mode="min",
         save_top_k=1,
-        save_last=True,
+        save_last=False,
+        save_weights_only=True,
         auto_insert_metric_name=False,
     )
     trainer = pl.Trainer(

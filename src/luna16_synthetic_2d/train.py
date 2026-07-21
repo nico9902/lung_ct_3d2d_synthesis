@@ -200,7 +200,8 @@ def main() -> None:
         monitor=args.monitor,
         mode="min" if args.monitor == "val_loss" else "max",
         save_top_k=1,
-        save_last=True,
+        save_last=False,
+        save_weights_only=True,
     )
     early_stop_callback = EarlyStopping(
         monitor=args.monitor,

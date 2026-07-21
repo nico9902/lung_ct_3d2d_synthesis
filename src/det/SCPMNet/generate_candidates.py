@@ -71,9 +71,9 @@ def generate_candidates(args: argparse.Namespace) -> pd.DataFrame:
                 dtype=torch.float32,
             )
             detections = sphere_nms(detections, args.nms_threshold, args.final_topk)
-            for z, y, x, radius, score in detections.tolist():
-                merged_rows.append([seriesuid, z, y, x, radius, score])
-    candidates = pd.DataFrame(merged_rows, columns=columns)
+            for rank, (z, y, x, radius, score) in enumerate(detections.tolist(), start=1):
+                merged_rows.append([seriesuid, z, y, x, radius, score, rank])
+    candidates = pd.DataFrame(merged_rows, columns=[*columns, "candidate_rank"])
     if args.label_candidates:
         gt = ground_truth_by_series(args.csv_path, args.split, args.data_root, skip_missing_images=not args.keep_missing_images)
         candidates = label_candidates(candidates, gt, ignore_margin=args.ignore_margin)
@@ -96,11 +96,19 @@ def main() -> None:
     parser.add_argument("--decode-threshold", type=float, default=0.05)
     parser.add_argument("--decode-topk", type=int, default=300)
     parser.add_argument("--final-topk", type=int, default=300)
+    parser.add_argument(
+        "--top-candidates-per-volume",
+        type=int,
+        default=None,
+        help="Semantic alias for --final-topk. Use 100 for Top-100-per-volume FPR experiments.",
+    )
     parser.add_argument("--nms-threshold", type=float, default=0.05)
     parser.add_argument("--label-candidates", action="store_true")
     parser.add_argument("--ignore-margin", type=float, default=2.0)
     parser.add_argument("--keep-missing-images", action="store_true")
     args = parser.parse_args()
+    if args.top_candidates_per_volume is not None:
+        args.final_topk = int(args.top_candidates_per_volume)
 
     candidates = generate_candidates(args)
     output_csv = Path(args.output_csv)
