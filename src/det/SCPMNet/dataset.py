@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from itertools import product
+import os
 from pathlib import Path
 
 import nibabel as nib
@@ -23,9 +24,60 @@ def load_volume(path: str | Path) -> np.ndarray:
     return volume.transpose(2, 1, 0)
 
 
-def normalize_ct(volume: np.ndarray, clip: tuple[float, float]) -> np.ndarray:
+def normalize_ct(volume: np.ndarray, clip: tuple[float, float], intensity_mode: str = "hu") -> np.ndarray:
+    mode = str(intensity_mode).lower()
+    if mode == "auto":
+        finite = volume[np.isfinite(volume)]
+        if finite.size and float(finite.min()) >= 0.0 and float(finite.max()) <= 255.0:
+            mode = "uint8"
+        else:
+            mode = "hu"
+    if mode == "uint8":
+        volume = np.clip(volume, 0.0, 255.0)
+        return (volume / 255.0 * 2.0 - 1.0).astype(np.float32)
+    if mode != "hu":
+        raise ValueError(f"Unsupported intensity_mode={intensity_mode!r}; expected 'hu', 'uint8', or 'auto'.")
     volume = np.clip(volume, clip[0], clip[1])
     return ((volume - clip[0]) / (clip[1] - clip[0]) * 2.0 - 1.0).astype(np.float32)
+
+
+def normalized_volume_cache_path(
+    cache_dir: str | Path,
+    seriesuid: str,
+    clip: tuple[float, float],
+    intensity_mode: str,
+) -> Path:
+    safe_seriesuid = "".join(ch if ch.isalnum() or ch in ".-_" else "_" for ch in str(seriesuid))
+    clip_tag = f"{float(clip[0]):g}_{float(clip[1]):g}".replace("-", "m").replace(".", "p")
+    return Path(cache_dir) / f"{safe_seriesuid}_mode-{str(intensity_mode)}_clip-{clip_tag}.npy"
+
+
+def load_normalized_volume(
+    image_path: str | Path,
+    clip: tuple[float, float],
+    intensity_mode: str = "hu",
+    normalized_volume_cache_dir: str | Path | None = None,
+    seriesuid: str | None = None,
+) -> np.ndarray:
+    if not normalized_volume_cache_dir:
+        return normalize_ct(load_volume(image_path), clip, intensity_mode)
+
+    cache_dir = Path(normalized_volume_cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_key = seriesuid or Path(image_path).name.replace("_volume.nii.gz", "").replace(".nii.gz", "").replace(".npy", "")
+    cache_path = normalized_volume_cache_path(cache_dir, cache_key, clip, intensity_mode)
+    if cache_path.exists():
+        return np.load(cache_path, mmap_mode="r")
+
+    volume = normalize_ct(load_volume(image_path), clip, intensity_mode)
+    tmp_path = cache_path.with_name(f"{cache_path.name}.tmp-{os.getpid()}.npy")
+    try:
+        np.save(tmp_path, volume)
+        os.replace(tmp_path, cache_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    return np.load(cache_path, mmap_mode="r")
 
 
 def pad_crop(volume: np.ndarray, start: np.ndarray, crop_size: np.ndarray, pad_value: float = -1.0) -> tuple[np.ndarray, np.ndarray]:
@@ -100,6 +152,8 @@ class SCPMCSVVolumeDataset(Dataset):
         crop_size: tuple[int, int, int] = (96, 96, 96),
         samples_per_volume: int = 1,
         clip: tuple[float, float] = (-1000.0, 400.0),
+        intensity_mode: str = "hu",
+        normalized_volume_cache_dir: str | Path | None = None,
         positive_crop_prob: float = 0.7,
         mask_path_column: str | None = None,
         skip_missing_images: bool = True,
@@ -111,6 +165,8 @@ class SCPMCSVVolumeDataset(Dataset):
         self.crop_size = np.asarray(crop_size, dtype=np.int64)
         self.samples_per_volume = max(1, int(samples_per_volume))
         self.clip = clip
+        self.intensity_mode = str(intensity_mode)
+        self.normalized_volume_cache_dir = Path(normalized_volume_cache_dir) if normalized_volume_cache_dir else None
         self.positive_crop_prob = positive_crop_prob
         self.mask_path_column = mask_path_column
         self.deterministic_seed = deterministic_seed
@@ -118,7 +174,7 @@ class SCPMCSVVolumeDataset(Dataset):
         self.groups = [(str(k), g.reset_index(drop=True)) for k, g in df.groupby("seriesuid", sort=False)]
 
     def __len__(self) -> int:
-        return len(self.groups) * self.samples_per_volume
+        return len(self.groups)
 
     def _resolve(self, path: str) -> Path:
         path = Path(str(path))
@@ -195,19 +251,35 @@ class SCPMCSVVolumeDataset(Dataset):
             annotations[:, :3] -= src_start
         return annotations
 
-    def __getitem__(self, index: int) -> dict[str, torch.Tensor | str]:
-        seriesuid, rows = self.groups[index // self.samples_per_volume]
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor | list[torch.Tensor] | str]:
+        seriesuid, rows = self.groups[index]
         #print(f"Loading seriesuid={seriesuid} for sample index {index} with {len(rows)} annotation rows.")
         image_path = Path(rows.iloc[0]["_resolved_image_path"])
-        volume = normalize_ct(load_volume(image_path), self.clip)
+        volume = load_normalized_volume(
+            image_path,
+            self.clip,
+            self.intensity_mode,
+            self.normalized_volume_cache_dir,
+            seriesuid=seriesuid,
+        )
         annotations = self._annotations_from_rows(rows, volume.shape)
-        start = self._crop_start(np.asarray(volume.shape), annotations, self._rng(index))
-        crop, src_start = pad_crop(volume, start, self.crop_size)
-        annotations = self._crop_annotations(annotations, src_start)
+
+        crops = []
+        crop_annotations = []
+        origins = []
+        for sample_idx in range(self.samples_per_volume):
+            rng_index = index * self.samples_per_volume + sample_idx
+            start = self._crop_start(np.asarray(volume.shape), annotations, self._rng(rng_index))
+            crop, src_start = pad_crop(volume, start, self.crop_size)
+            sample_annotations = self._crop_annotations(annotations, src_start)
+            crops.append(torch.from_numpy(crop[None]))
+            crop_annotations.append(torch.from_numpy(sample_annotations.astype(np.float32)))
+            origins.append(torch.from_numpy(src_start.astype(np.float32)))
+
         return {
-            "image": torch.from_numpy(crop[None]),
-            "annot": torch.from_numpy(annotations.astype(np.float32)),
-            "origin": torch.from_numpy(src_start.astype(np.float32)),
+            "image": torch.stack(crops),
+            "annot": crop_annotations,
+            "origin": torch.stack(origins),
             "seriesuid": seriesuid,
         }
 
@@ -234,6 +306,8 @@ class SCPMSlidingWindowDataset(Dataset):
         crop_size: tuple[int, int, int] = (96, 96, 96),
         stride: tuple[int, int, int] = (24, 24, 24),
         clip: tuple[float, float] = (-1000.0, 400.0),
+        intensity_mode: str = "hu",
+        normalized_volume_cache_dir: str | Path | None = None,
         mask_path_column: str | None = None,
         skip_missing_images: bool = True,
         include_annotations: bool = False,
@@ -244,6 +318,8 @@ class SCPMSlidingWindowDataset(Dataset):
         self.crop_size = np.asarray(crop_size, dtype=np.int64)
         self.stride = np.asarray(stride, dtype=np.int64)
         self.clip = clip
+        self.intensity_mode = str(intensity_mode)
+        self.normalized_volume_cache_dir = Path(normalized_volume_cache_dir) if normalized_volume_cache_dir else None
         self.mask_path_column = mask_path_column
         self.include_annotations = include_annotations
         self._cached_path: Path | None = None
@@ -256,6 +332,8 @@ class SCPMSlidingWindowDataset(Dataset):
                 data_root=data_root,
                 crop_size=crop_size,
                 clip=clip,
+                intensity_mode=intensity_mode,
+                normalized_volume_cache_dir=normalized_volume_cache_dir,
                 mask_path_column=mask_path_column,
                 skip_missing_images=skip_missing_images,
             )
@@ -279,7 +357,14 @@ class SCPMSlidingWindowDataset(Dataset):
         if self._cached_path == image_path and self._cached_volume is not None:
             return self._cached_volume
         self._cached_path = image_path
-        self._cached_volume = normalize_ct(load_volume(image_path), self.clip)
+        seriesuid = image_path.name.replace("_volume.nii.gz", "").replace(".nii.gz", "").replace(".npy", "")
+        self._cached_volume = load_normalized_volume(
+            image_path,
+            self.clip,
+            self.intensity_mode,
+            self.normalized_volume_cache_dir,
+            seriesuid=seriesuid,
+        )
         return self._cached_volume
 
     def _annotations_from_rows(self, rows: pd.DataFrame, shape: tuple[int, int, int]) -> np.ndarray:
@@ -313,17 +398,53 @@ class SCPMSlidingWindowDataset(Dataset):
         return sample
 
 
-def scpm_collate(batch: list[dict[str, torch.Tensor | str]]) -> dict[str, torch.Tensor | list[str]]:
-    images = torch.stack([item["image"] for item in batch])
-    max_ann = max(int(item["annot"].shape[0]) for item in batch)
-    annots = torch.zeros((len(batch), max(max_ann, 1), 4), dtype=torch.float32)
-    for i, item in enumerate(batch):
-        annot = item["annot"]
+def scpm_collate(batch: list[dict[str, torch.Tensor | list[torch.Tensor] | str]]) -> dict[str, torch.Tensor | list[str]]:
+    image_chunks = []
+    annotation_chunks = []
+    origin_chunks = []
+    seriesuids = []
+
+    for item in batch:
+        image = item["image"]
+        if not isinstance(image, torch.Tensor):
+            raise TypeError(f"Expected tensor image, got {type(image)!r}.")
+        if image.ndim == 4:
+            image = image.unsqueeze(0)
+        elif image.ndim != 5:
+            raise ValueError(f"Expected image with 4 or 5 dims, got shape {tuple(image.shape)}.")
+        image_chunks.append(image)
+
+        item_annotations = item["annot"]
+        if isinstance(item_annotations, torch.Tensor):
+            if item_annotations.ndim == 2:
+                annotation_chunks.append(item_annotations)
+            elif item_annotations.ndim == 3:
+                annotation_chunks.extend([annot for annot in item_annotations])
+            else:
+                raise ValueError(f"Expected annotations with 2 or 3 dims, got shape {tuple(item_annotations.shape)}.")
+        else:
+            annotation_chunks.extend(item_annotations)
+
+        seriesuids.extend([str(item["seriesuid"])] * int(image.shape[0]))
+
+        if "origin" in item:
+            origin = item["origin"]
+            if not isinstance(origin, torch.Tensor):
+                raise TypeError(f"Expected tensor origin, got {type(origin)!r}.")
+            if origin.ndim == 1:
+                origin = origin.unsqueeze(0)
+            origin_chunks.append(origin)
+
+    images = torch.cat(image_chunks, dim=0)
+    max_ann = max(int(annot.shape[0]) for annot in annotation_chunks)
+    annots = torch.zeros((len(annotation_chunks), max(max_ann, 1), 4), dtype=torch.float32)
+    for i, annot in enumerate(annotation_chunks):
         if annot.numel():
             annots[i, : annot.shape[0]] = annot
-    output = {"image": images, "annot": annots, "seriesuid": [str(item["seriesuid"]) for item in batch]}
+
+    output = {"image": images, "annot": annots, "seriesuid": seriesuids}
     if all("origin" in item for item in batch):
-        output["origin"] = torch.stack([item["origin"] for item in batch])
+        output["origin"] = torch.cat(origin_chunks, dim=0)
     return output
 
 

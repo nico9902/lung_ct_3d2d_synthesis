@@ -8,6 +8,7 @@ import wandb
 from omegaconf import DictConfig, OmegaConf
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
@@ -49,6 +50,48 @@ class ValidationScheduleCallback(pl.Callback):
     def on_validation_end(self, trainer, pl_module):
         if int(trainer.current_epoch) + 1 >= self.start_epoch:
             trainer.check_val_every_n_epoch = self.every_n_epochs
+
+
+class FiniteValueMonitor(pl.Callback):
+    def __init__(
+        self,
+        check_logged_metrics: bool = True,
+        check_gradients: bool = True,
+        every_n_train_steps: int = 1,
+    ):
+        super().__init__()
+        self.check_logged_metrics = bool(check_logged_metrics)
+        self.check_gradients = bool(check_gradients)
+        self.every_n_train_steps = max(1, int(every_n_train_steps))
+
+    @staticmethod
+    def _ensure_finite(name: str, value) -> None:
+        if isinstance(value, torch.Tensor):
+            if value.numel() and not torch.isfinite(value.detach()).all():
+                raise FloatingPointError(f"Non-finite value detected in {name}.")
+            return
+        if isinstance(value, (float, int)):
+            scalar = torch.tensor(float(value))
+            if not torch.isfinite(scalar):
+                raise FloatingPointError(f"Non-finite value detected in {name}: {value}.")
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        if isinstance(outputs, torch.Tensor):
+            self._ensure_finite("train_step_output", outputs)
+        elif isinstance(outputs, dict):
+            for name, value in outputs.items():
+                self._ensure_finite(f"train_step_output/{name}", value)
+
+        if self.check_logged_metrics:
+            for name, value in trainer.callback_metrics.items():
+                self._ensure_finite(f"logged_metric/{name}", value)
+
+    def on_before_optimizer_step(self, trainer, pl_module, optimizer):
+        if not self.check_gradients or int(trainer.global_step) % self.every_n_train_steps:
+            return
+        for name, parameter in pl_module.named_parameters():
+            if parameter.grad is not None and not torch.isfinite(parameter.grad.detach()).all():
+                raise FloatingPointError(f"Non-finite gradient detected in parameter {name}.")
 
 
 def build_logger(cfg: DictConfig):
@@ -101,6 +144,8 @@ def run(cfg: DictConfig) -> None:
         crop_size=tuple(cfg.crop_size),
         samples_per_volume=cfg.samples_per_volume,
         clip=tuple(cfg.clip),
+        intensity_mode=cfg.get("intensity_mode", "hu"),
+        normalized_volume_cache_dir=cfg.get("normalized_volume_cache_dir", None),
         positive_crop_prob=cfg.positive_crop_prob,
         mask_path_column=cfg.mask_path_column,
         skip_missing_images=cfg.skip_missing_images,
@@ -162,6 +207,14 @@ def run(cfg: DictConfig) -> None:
         start_epoch=cfg.get("checkpoint_start_epoch", 1),
     )
     callbacks = [checkpoint]
+    if cfg.get("monitor_finite_values", False):
+        callbacks.append(
+            FiniteValueMonitor(
+                check_logged_metrics=cfg.get("finite_monitor_check_logged_metrics", True),
+                check_gradients=cfg.get("finite_monitor_check_gradients", True),
+                every_n_train_steps=cfg.get("finite_monitor_every_n_train_steps", 1),
+            )
+        )
     if cfg.get("val_froc_start_epoch", None) is not None:
         callbacks.append(
             ValidationScheduleCallback(
@@ -189,8 +242,11 @@ def run(cfg: DictConfig) -> None:
         logger=logger,
         log_every_n_steps=cfg.log_every_n_steps,
         accumulate_grad_batches=cfg.accumulate_grad_batches,
+        gradient_clip_val=cfg.get("gradient_clip_val", 0.0),
+        gradient_clip_algorithm=cfg.get("gradient_clip_algorithm", "norm"),
         num_sanity_val_steps=cfg.num_sanity_val_steps,
         check_val_every_n_epoch=initial_check_val_every_n_epoch,
+        detect_anomaly=cfg.get("detect_anomaly", False),
     )
     status = "success"
     try:

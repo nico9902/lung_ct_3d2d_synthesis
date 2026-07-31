@@ -40,6 +40,8 @@ samples_per_volume: 2
 clip:
   - -1000.0
   - 400.0
+intensity_mode: hu
+normalized_volume_cache_dir: null
 positive_crop_prob: 0.7
 mask_path_column: null
 skip_missing_images: true

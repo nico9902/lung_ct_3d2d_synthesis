@@ -84,9 +84,20 @@ def main() -> None:
     parser.add_argument("--output-dir", default="outputs/scpmnet/fp_reduction")
     parser.add_argument("--patch-size", type=int, nargs=3, default=(32, 32, 32))
     parser.add_argument("--clip", type=float, nargs=2, default=(-1000.0, 400.0))
+    parser.add_argument(
+        "--intensity-mode",
+        choices=("hu", "uint8", "auto"),
+        default="hu",
+        help="Patch intensity normalization. Use 'auto' for LUNA16 preprocessed 0..255 volumes.",
+    )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--volume-cache-size", type=int, default=4, help="Per-worker number of CT volumes to keep in RAM.")
+    parser.add_argument(
+        "--normalized-volume-cache-dir",
+        default=None,
+        help="Optional directory with normalized .npy volumes to avoid repeatedly decoding NIfTI files.",
+    )
     parser.add_argument(
         "--samples-per-epoch",
         type=int,
@@ -109,6 +120,9 @@ def main() -> None:
             "'none' to disable, or 'balanced_only' to auto-enable only with --no-balanced-sampler."
         ),
     )
+    parser.add_argument("--loss", choices=("bce", "focal"), default="bce", help="Patch-level FPR training loss.")
+    parser.add_argument("--focal-alpha", type=float, default=0.5, help="Positive-class alpha for focal loss.")
+    parser.add_argument("--focal-gamma", type=float, default=2.0, help="Gamma focusing parameter for focal loss.")
     parser.add_argument("--use-wandb", action="store_true")
     parser.add_argument("--wandb-project", default="lung_ct_3d2d_synthesis_detection")
     parser.add_argument("--wandb-name", default=None)
@@ -131,8 +145,10 @@ def main() -> None:
         data_root=args.data_root,
         patch_size=args.patch_size,
         clip=args.clip,
+        intensity_mode=args.intensity_mode,
         augment=True,
         volume_cache_size=args.volume_cache_size,
+        normalized_volume_cache_dir=args.normalized_volume_cache_dir,
     )
     val_ds = CandidatePatchDataset(
         candidates_csv=args.val_candidates,
@@ -141,8 +157,10 @@ def main() -> None:
         data_root=args.data_root,
         patch_size=args.patch_size,
         clip=args.clip,
+        intensity_mode=args.intensity_mode,
         augment=False,
         volume_cache_size=args.volume_cache_size,
+        normalized_volume_cache_dir=args.normalized_volume_cache_dir,
     )
     print(f"Train candidates: {len(train_ds)} | positives={int(train_ds.labels().sum())} negatives={int((train_ds.labels() == 0).sum())}")
     print(f"Val candidates: {len(val_ds)} | positives={int(val_ds.labels().sum())} negatives={int((val_ds.labels() == 0).sum())}")
@@ -168,13 +186,24 @@ def main() -> None:
         pos_weight = neg / pos if args.no_balanced_sampler else None
     else:
         pos_weight = float(args.pos_weight)
-    if pos_weight is not None:
+    if args.loss == "focal":
+        print(f"Using focal loss with alpha={args.focal_alpha:.6g}, gamma={args.focal_gamma:.6g}.")
+        if pos_weight is not None:
+            print(f"Using focal BCE base pos_weight={pos_weight:.6g}")
+    elif pos_weight is not None:
         print(f"Using BCE pos_weight={pos_weight:.6g}")
     elif not args.no_balanced_sampler:
         print("Using balanced sampler without BCE pos_weight.")
     else:
         print("Using unweighted BCE on natural candidate distribution.")
-    model = FPReductionLitModel(lr=args.lr, weight_decay=args.weight_decay, pos_weight=pos_weight)
+    model = FPReductionLitModel(
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        pos_weight=pos_weight,
+        loss_name=args.loss,
+        focal_alpha=args.focal_alpha,
+        focal_gamma=args.focal_gamma,
+    )
     logger = build_logger(
         args,
         {
@@ -186,13 +215,17 @@ def main() -> None:
             "val_negatives": int((val_ds.labels() == 0).sum()),
             "effective_pos_weight": pos_weight,
             "balanced_sampler": not args.no_balanced_sampler,
+            "loss_name": args.loss,
+            "focal_alpha": args.focal_alpha,
+            "focal_gamma": args.focal_gamma,
+            "intensity_mode": args.intensity_mode,
         },
     )
     checkpoint = ModelCheckpoint(
         dirpath=output_dir / "checkpoints",
-        filename="epoch={epoch:03d}-val_loss={val/loss:.4f}",
-        monitor="val/loss",
-        mode="min",
+        filename="epoch={epoch:03d}-val_mcc={val/mcc:.4f}",
+        monitor="val/mcc",
+        mode="max",
         save_top_k=1,
         save_last=False,
         save_weights_only=True,

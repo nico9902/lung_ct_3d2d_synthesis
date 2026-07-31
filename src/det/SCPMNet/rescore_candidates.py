@@ -26,9 +26,20 @@ def main() -> None:
     parser.add_argument("--output-dir", default="outputs/scpmnet/fp_reduction/rescored_test")
     parser.add_argument("--patch-size", type=int, nargs=3, default=(32, 32, 32))
     parser.add_argument("--clip", type=float, nargs=2, default=(-1000.0, 400.0))
+    parser.add_argument(
+        "--intensity-mode",
+        choices=("hu", "uint8", "auto"),
+        default="hu",
+        help="Patch intensity normalization. Must match FPR training.",
+    )
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--volume-cache-size", type=int, default=4)
+    parser.add_argument(
+        "--normalized-volume-cache-dir",
+        default=None,
+        help="Optional directory with normalized .npy volumes to avoid repeatedly decoding NIfTI files.",
+    )
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--score-mode", choices=("classifier", "multiply", "average"), default="multiply")
     args = parser.parse_args()
@@ -51,9 +62,11 @@ def main() -> None:
         data_root=args.data_root,
         patch_size=args.patch_size,
         clip=args.clip,
+        intensity_mode=args.intensity_mode,
         include_ignored=True,
         augment=False,
         volume_cache_size=args.volume_cache_size,
+        normalized_volume_cache_dir=args.normalized_volume_cache_dir,
     )
     loader = DataLoader(
         dataset,

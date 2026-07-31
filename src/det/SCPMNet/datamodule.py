@@ -27,6 +27,8 @@ class SCPMDataModule(pl.LightningDataModule):
         crop_size: tuple[int, int, int] = (96, 96, 96),
         samples_per_volume: int = 1,
         clip: tuple[float, float] = (-1000.0, 400.0),
+        intensity_mode: str = "hu",
+        normalized_volume_cache_dir: str | None = None,
         positive_crop_prob: float = 0.7,
         mask_path_column: str | None = None,
         skip_missing_images: bool = True,
@@ -48,6 +50,8 @@ class SCPMDataModule(pl.LightningDataModule):
             crop_size=tuple(self.hparams.crop_size),
             samples_per_volume=self.hparams.samples_per_volume,
             clip=tuple(self.hparams.clip),
+            intensity_mode=self.hparams.intensity_mode,
+            normalized_volume_cache_dir=self.hparams.normalized_volume_cache_dir,
             positive_crop_prob=self.hparams.positive_crop_prob,
             mask_path_column=self.hparams.mask_path_column,
             skip_missing_images=self.hparams.skip_missing_images,
@@ -68,6 +72,8 @@ class SCPMDataModule(pl.LightningDataModule):
                             crop_size=tuple(self.hparams.crop_size),
                             stride=tuple(self.hparams.sliding_window_stride),
                             clip=tuple(self.hparams.clip),
+                            intensity_mode=self.hparams.intensity_mode,
+                            normalized_volume_cache_dir=self.hparams.normalized_volume_cache_dir,
                             mask_path_column=self.hparams.mask_path_column,
                             skip_missing_images=self.hparams.skip_missing_images,
                             include_annotations=True,
@@ -98,6 +104,8 @@ class SCPMDataModule(pl.LightningDataModule):
                             crop_size=tuple(self.hparams.crop_size),
                             stride=tuple(self.hparams.sliding_window_stride),
                             clip=tuple(self.hparams.clip),
+                            intensity_mode=self.hparams.intensity_mode,
+                            normalized_volume_cache_dir=self.hparams.normalized_volume_cache_dir,
                             skip_missing_images=self.hparams.skip_missing_images,
                         )
                         name = "full_volume_froc"
@@ -117,6 +125,8 @@ class SCPMDataModule(pl.LightningDataModule):
                     crop_size=tuple(self.hparams.crop_size),
                     stride=tuple(self.hparams.sliding_window_stride),
                     clip=tuple(self.hparams.clip),
+                    intensity_mode=self.hparams.intensity_mode,
+                    normalized_volume_cache_dir=self.hparams.normalized_volume_cache_dir,
                     skip_missing_images=self.hparams.skip_missing_images,
                 )
                 self.val_loader_names = ["val"]
@@ -137,6 +147,8 @@ class SCPMDataModule(pl.LightningDataModule):
                     crop_size=tuple(self.hparams.crop_size),
                     stride=tuple(self.hparams.sliding_window_stride),
                     clip=tuple(self.hparams.clip),
+                    intensity_mode=self.hparams.intensity_mode,
+                    normalized_volume_cache_dir=self.hparams.normalized_volume_cache_dir,
                     skip_missing_images=self.hparams.skip_missing_images,
                 )
             else:

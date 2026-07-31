@@ -29,6 +29,13 @@ num_sanity_val_steps: 0
 check_val_every_n_epoch: 1
 checkpoint: null
 test_only: false
+monitor_finite_values: false
+finite_monitor_check_logged_metrics: true
+finite_monitor_check_gradients: true
+finite_monitor_every_n_train_steps: 1
+detect_anomaly: false
+gradient_clip_val: 0.0
+gradient_clip_algorithm: norm
 checkpoint_monitor: val/loss
 checkpoint_mode: min
 checkpoint_filename: epoch={epoch:03d}-val_loss={val/loss:.4f}
@@ -53,6 +60,8 @@ samples_per_volume: 1
 clip:
   - -1000.0
   - 400.0
+intensity_mode: hu
+normalized_volume_cache_dir: null
 positive_crop_prob: 0.7
 mask_path_column: null
 skip_missing_images: true

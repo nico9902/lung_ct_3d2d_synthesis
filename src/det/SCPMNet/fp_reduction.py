@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Sequence
 from collections import OrderedDict
@@ -134,10 +135,12 @@ class CandidatePatchDataset(Dataset):
         data_root: str | Path,
         patch_size: Sequence[int] = (32, 32, 32),
         clip: Sequence[float] = (-1000.0, 400.0),
+        intensity_mode: str = "hu",
         skip_missing_images: bool = True,
         include_ignored: bool = False,
         augment: bool = False,
         volume_cache_size: int = 4,
+        normalized_volume_cache_dir: str | Path | None = None,
     ):
         self.candidates = pd.read_csv(candidates_csv)
         if "label" not in self.candidates.columns:
@@ -148,8 +151,12 @@ class CandidatePatchDataset(Dataset):
         self.image_paths = image_paths_by_series(csv_path, split, data_root, skip_missing_images)
         self.patch_size = np.asarray(tuple(int(v) for v in patch_size), dtype=np.int64)
         self.clip = (float(clip[0]), float(clip[1]))
+        self.intensity_mode = str(intensity_mode)
         self.augment = augment
         self.volume_cache_size = max(1, int(volume_cache_size))
+        self.normalized_volume_cache_dir = Path(normalized_volume_cache_dir) if normalized_volume_cache_dir else None
+        if self.normalized_volume_cache_dir is not None:
+            self.normalized_volume_cache_dir.mkdir(parents=True, exist_ok=True)
         self._volume_cache: OrderedDict[str, np.ndarray] = OrderedDict()
 
     def __len__(self) -> int:
@@ -163,11 +170,36 @@ class CandidatePatchDataset(Dataset):
             volume = self._volume_cache.pop(seriesuid)
             self._volume_cache[seriesuid] = volume
             return volume
-        volume = normalize_ct(load_volume(self.image_paths[seriesuid]), self.clip)
+        volume = self._load_normalized_volume(seriesuid)
         self._volume_cache[seriesuid] = volume
         while len(self._volume_cache) > self.volume_cache_size:
             self._volume_cache.popitem(last=False)
         return volume
+
+    def _normalized_cache_path(self, seriesuid: str) -> Path:
+        if self.normalized_volume_cache_dir is None:
+            raise RuntimeError("normalized_volume_cache_dir is not configured.")
+        safe_seriesuid = "".join(ch if ch.isalnum() or ch in ".-_" else "_" for ch in seriesuid)
+        clip_tag = f"{self.clip[0]:g}_{self.clip[1]:g}".replace("-", "m").replace(".", "p")
+        return self.normalized_volume_cache_dir / f"{safe_seriesuid}_mode-{self.intensity_mode}_clip-{clip_tag}.npy"
+
+    def _load_normalized_volume(self, seriesuid: str) -> np.ndarray:
+        if self.normalized_volume_cache_dir is None:
+            return normalize_ct(load_volume(self.image_paths[seriesuid]), self.clip, self.intensity_mode)
+
+        cache_path = self._normalized_cache_path(seriesuid)
+        if cache_path.exists():
+            return np.load(cache_path, mmap_mode="r")
+
+        volume = normalize_ct(load_volume(self.image_paths[seriesuid]), self.clip, self.intensity_mode)
+        tmp_path = cache_path.with_name(f"{cache_path.name}.tmp-{os.getpid()}.npy")
+        try:
+            np.save(tmp_path, volume)
+            os.replace(tmp_path, cache_path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        return np.load(cache_path, mmap_mode="r")
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         row = self.candidates.iloc[index]
@@ -230,7 +262,15 @@ class FPReductionNet(nn.Module):
 
 
 class FPReductionLitModel(pl.LightningModule if pl is not None else nn.Module):
-    def __init__(self, lr: float = 1e-4, weight_decay: float = 1e-4, pos_weight: float | None = None):
+    def __init__(
+        self,
+        lr: float = 1e-4,
+        weight_decay: float = 1e-4,
+        pos_weight: float | None = None,
+        loss_name: str = "bce",
+        focal_alpha: float = 0.5,
+        focal_gamma: float = 2.0,
+    ):
         super().__init__()
         if pl is not None:
             self.save_hyperparameters()
@@ -238,6 +278,11 @@ class FPReductionLitModel(pl.LightningModule if pl is not None else nn.Module):
         self.lr = lr
         self.weight_decay = weight_decay
         self.pos_weight_value = pos_weight
+        self.loss_name = str(loss_name).lower()
+        self.focal_alpha = float(focal_alpha)
+        self.focal_gamma = float(focal_gamma)
+        self._epoch_probs: dict[str, list[torch.Tensor]] = {"train": [], "val": []}
+        self._epoch_labels: dict[str, list[torch.Tensor]] = {"train": [], "val": []}
 
     def forward(self, image: torch.Tensor, meta: torch.Tensor) -> torch.Tensor:
         return self.net(image, meta)
@@ -246,7 +291,66 @@ class FPReductionLitModel(pl.LightningModule if pl is not None else nn.Module):
         pos_weight = None
         if self.pos_weight_value is not None:
             pos_weight = torch.tensor(float(self.pos_weight_value), device=logits.device)
-        return F.binary_cross_entropy_with_logits(logits, labels, pos_weight=pos_weight)
+        bce = F.binary_cross_entropy_with_logits(logits, labels, pos_weight=pos_weight, reduction="none")
+        if self.loss_name == "bce":
+            return bce.mean()
+        if self.loss_name != "focal":
+            raise ValueError(f"Unsupported FPR loss: {self.loss_name}")
+
+        probs = torch.sigmoid(logits)
+        p_t = probs * labels + (1.0 - probs) * (1.0 - labels)
+        alpha_t = self.focal_alpha * labels + (1.0 - self.focal_alpha) * (1.0 - labels)
+        focal_weight = alpha_t * torch.pow(1.0 - p_t, self.focal_gamma)
+        return (focal_weight * bce).mean()
+
+    @staticmethod
+    def _binary_mcc(probs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        preds = probs >= 0.5
+        labels_bool = labels >= 0.5
+        tp = (preds & labels_bool).sum().float()
+        tn = (~preds & ~labels_bool).sum().float()
+        fp = (preds & ~labels_bool).sum().float()
+        fn = (~preds & labels_bool).sum().float()
+        denom = torch.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+        if denom <= 0:
+            return torch.zeros((), dtype=torch.float32, device=probs.device)
+        return (tp * tn - fp * fn) / denom
+
+    @staticmethod
+    def _binary_auc(probs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        labels = (labels >= 0.5).long()
+        n_pos = labels.sum().float()
+        n_neg = (labels.numel() - labels.sum()).float()
+        if n_pos <= 0 or n_neg <= 0:
+            return torch.full((), float("nan"), dtype=torch.float32, device=probs.device)
+
+        sorted_probs, order = torch.sort(probs)
+        sorted_labels = labels[order]
+        ranks = torch.arange(1, probs.numel() + 1, dtype=torch.float32, device=probs.device)
+        _, inverse, counts = torch.unique_consecutive(sorted_probs, return_inverse=True, return_counts=True)
+        if torch.any(counts > 1):
+            starts = torch.cumsum(counts, dim=0) - counts
+            avg_ranks = starts.float() + (counts.float() + 1.0) / 2.0
+            ranks = avg_ranks[inverse]
+
+        pos_rank_sum = ranks[sorted_labels == 1].sum()
+        return (pos_rank_sum - n_pos * (n_pos + 1.0) / 2.0) / (n_pos * n_neg)
+
+    def _reset_epoch_metrics(self, stage: str) -> None:
+        self._epoch_probs[stage] = []
+        self._epoch_labels[stage] = []
+
+    def _log_epoch_metrics(self, stage: str) -> None:
+        if not self._epoch_probs[stage]:
+            return
+        probs = torch.cat(self._epoch_probs[stage]).float()
+        labels = torch.cat(self._epoch_labels[stage]).float()
+        mcc = self._binary_mcc(probs, labels)
+        auc = self._binary_auc(probs, labels)
+        if pl is not None:
+            self.log(f"{stage}/mcc", mcc, prog_bar=stage == "val", on_epoch=True)
+            self.log(f"{stage}/auc", auc, prog_bar=stage == "val", on_epoch=True)
+        self._reset_epoch_metrics(stage)
 
     def _step(self, batch: dict[str, torch.Tensor], stage: str) -> torch.Tensor:
         logits = self(batch["image"], batch["meta"])
@@ -255,16 +359,30 @@ class FPReductionLitModel(pl.LightningModule if pl is not None else nn.Module):
         probs = torch.sigmoid(logits)
         preds = (probs >= 0.5).float()
         acc = (preds == labels).float().mean()
+        self._epoch_probs[stage].append(probs.detach().cpu())
+        self._epoch_labels[stage].append(labels.detach().cpu())
         if pl is not None:
             self.log(f"{stage}/loss", loss, prog_bar=True, on_epoch=True, batch_size=labels.numel())
             self.log(f"{stage}/acc", acc, prog_bar=stage == "val", on_epoch=True, batch_size=labels.numel())
         return loss
 
+    def on_train_epoch_start(self) -> None:
+        self._reset_epoch_metrics("train")
+
+    def on_validation_epoch_start(self) -> None:
+        self._reset_epoch_metrics("val")
+
     def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         return self._step(batch, "train")
 
+    def on_train_epoch_end(self) -> None:
+        self._log_epoch_metrics("train")
+
     def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         return self._step(batch, "val")
+
+    def on_validation_epoch_end(self) -> None:
+        self._log_epoch_metrics("val")
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

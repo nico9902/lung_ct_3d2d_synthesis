@@ -4,6 +4,7 @@ set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 cd "$PROJECT_DIR"
+export PYTHONPATH="$PROJECT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 VENV_PATH="${VENV_PATH:-myenv}"
 if [ -f "$VENV_PATH/bin/activate" ]; then
@@ -17,14 +18,14 @@ SPLIT_DIR="${SPLIT_DIR:-$DATA_ROOT/cv_splits}"
 DETECTOR_OUTPUT_ROOT="${DETECTOR_OUTPUT_ROOT:-outputs/scpmnet_luna16_10fold}"
 DETECTOR_FOLD_GLOB="${DETECTOR_FOLD_GLOB:-scpmnet_paper_luna16_fold*}"
 DETECTOR_PREDICTION_NAME="${DETECTOR_PREDICTION_NAME:-test_predictions.csv}"
-FPR_OUTPUT_ROOT="${FPR_OUTPUT_ROOT:-outputs/scpmnet_luna16_10fold_fpr_top100}"
+FPR_OUTPUT_ROOT="${FPR_OUTPUT_ROOT:-outputs/scpmnet_luna16_10fold_fpr_top100_focal_balanced_average_normauto}"
 
 START_FOLD="${START_FOLD:-0}"
 END_FOLD="${END_FOLD:-9}"
 TOP_CANDIDATES_PER_VOLUME="${TOP_CANDIDATES_PER_VOLUME:-100}"
 GENERATE_DETECTIONS="${GENERATE_DETECTIONS:-false}"
 
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 DEVICE="${DEVICE:-cuda:0}"
 ACCELERATOR="${ACCELERATOR:-gpu}"
 DEVICES="${DEVICES:-1}"
@@ -35,21 +36,39 @@ TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-128}"
 RESCORE_BATCH_SIZE="${RESCORE_BATCH_SIZE:-128}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
 VOLUME_CACHE_SIZE="${VOLUME_CACHE_SIZE:-4}"
+NORMALIZED_VOLUME_CACHE_DIR="${NORMALIZED_VOLUME_CACHE_DIR:-$FPR_OUTPUT_ROOT/normalized_volume_cache_${INTENSITY_MODE:-auto}}"
 
 DECODE_THRESHOLD="${DECODE_THRESHOLD:-0.05}"
 DECODE_TOPK="${DECODE_TOPK:-300}"
 NMS_THRESHOLD="${NMS_THRESHOLD:-0.05}"
 IGNORE_MARGIN="${IGNORE_MARGIN:-2.0}"
 
-MAX_EPOCHS="${MAX_EPOCHS:-30}"
+MAX_EPOCHS="${MAX_EPOCHS:-100}"
 LR="${LR:-1e-4}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-4}"
 SAMPLES_PER_EPOCH="${SAMPLES_PER_EPOCH:-10000}"
-SCORE_MODE="${SCORE_MODE:-multiply}"
+LOSS="${LOSS:-focal}"
+FOCAL_ALPHA="${FOCAL_ALPHA:-0.5}"
+FOCAL_GAMMA="${FOCAL_GAMMA:-2.0}"
+INTENSITY_MODE="${INTENSITY_MODE:-auto}"
+NO_BALANCED_SAMPLER="${NO_BALANCED_SAMPLER:-false}"
+POS_WEIGHT="${POS_WEIGHT:-none}"
+SCORE_MODE="${SCORE_MODE:-average}"
 USE_WANDB="${USE_WANDB:-true}"
 WANDB_PROJECT="${WANDB_PROJECT:-lung_ct_3d2d_synthesis_detection_fpr}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"
 WANDB_MODE="${WANDB_MODE:-online}"
+
+TRAIN_SCRIPT="$PROJECT_DIR/src/det/SCPMNet/train_fp_reduction.py"
+if [ ! -f "$TRAIN_SCRIPT" ]; then
+  echo "Missing FPR training script: $TRAIN_SCRIPT" >&2
+  exit 1
+fi
+if [ "$LOSS" != "bce" ] && ! grep -q -- "--loss" "$TRAIN_SCRIPT"; then
+  echo "The selected train_fp_reduction.py does not support --loss." >&2
+  echo "Update $TRAIN_SCRIPT before running LOSS=$LOSS." >&2
+  exit 1
+fi
 
 find_detector_checkpoint() {
   local fold_dir="$1"
@@ -126,6 +145,14 @@ for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
   done
 
   TRAIN_ARGS=()
+  SAMPLER_TAG="balanced"
+  if [ "$NO_BALANCED_SAMPLER" = "true" ]; then
+    TRAIN_ARGS+=(--no-balanced-sampler)
+    SAMPLER_TAG="natural"
+  fi
+  if [ -n "$POS_WEIGHT" ]; then
+    TRAIN_ARGS+=(--pos-weight "$POS_WEIGHT")
+  fi
   if [ -n "$SAMPLES_PER_EPOCH" ]; then
     TRAIN_ARGS+=(--samples-per-epoch "$SAMPLES_PER_EPOCH")
   fi
@@ -133,7 +160,7 @@ for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
     TRAIN_ARGS+=(
       --use-wandb
       --wandb-project "$WANDB_PROJECT"
-      --wandb-name "luna16_fpr_top${TOP_CANDIDATES_PER_VOLUME}_fold${FOLD}"
+      --wandb-name "luna16_fpr_top${TOP_CANDIDATES_PER_VOLUME}_${LOSS}_${SAMPLER_TAG}_${SCORE_MODE}_${INTENSITY_MODE}_fold${FOLD}"
       --wandb-mode "$WANDB_MODE"
     )
     if [ -n "$WANDB_ENTITY" ]; then
@@ -141,7 +168,7 @@ for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
     fi
   fi
 
-  python -m src.det.SCPMNet.train_fp_reduction \
+  python "$TRAIN_SCRIPT" \
     --train-candidates "$FPR_DIR/candidates_train_top${TOP_CANDIDATES_PER_VOLUME}.csv" \
     --val-candidates "$FPR_DIR/candidates_val_top${TOP_CANDIDATES_PER_VOLUME}.csv" \
     --csv-path "$CSV_PATH" \
@@ -150,9 +177,14 @@ for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
     --batch-size "$TRAIN_BATCH_SIZE" \
     --num-workers "$NUM_WORKERS" \
     --volume-cache-size "$VOLUME_CACHE_SIZE" \
+    --normalized-volume-cache-dir "$NORMALIZED_VOLUME_CACHE_DIR" \
     --max-epochs "$MAX_EPOCHS" \
     --lr "$LR" \
     --weight-decay "$WEIGHT_DECAY" \
+    --loss "$LOSS" \
+    --focal-alpha "$FOCAL_ALPHA" \
+    --focal-gamma "$FOCAL_GAMMA" \
+    --intensity-mode "$INTENSITY_MODE" \
     --accelerator "$ACCELERATOR" \
     --devices "$DEVICES" \
     --precision "$PRECISION" \
@@ -176,7 +208,9 @@ for FOLD in $(seq "$START_FOLD" "$END_FOLD"); do
     --batch-size "$RESCORE_BATCH_SIZE" \
     --num-workers "$NUM_WORKERS" \
     --volume-cache-size "$VOLUME_CACHE_SIZE" \
+    --normalized-volume-cache-dir "$NORMALIZED_VOLUME_CACHE_DIR" \
     --device "$DEVICE" \
+    --intensity-mode "$INTENSITY_MODE" \
     --score-mode "$SCORE_MODE"
 done
 
