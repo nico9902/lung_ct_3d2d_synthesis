@@ -51,6 +51,7 @@ logs/
 # Local secrets / environment config
 .env
 .env.*
+mcp.json
 
 # Local notes
 GITHUB_WORKFLOW.md
