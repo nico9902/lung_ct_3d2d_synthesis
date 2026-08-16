@@ -56,7 +56,7 @@ class SCPMDataModule(pl.LightningDataModule):
             mask_path_column=self.hparams.mask_path_column,
             skip_missing_images=self.hparams.skip_missing_images,
         )
-        if stage in (None, "fit"):
+        if stage in (None, "fit", "validate"):
             self.train_ds = SCPMCSVVolumeDataset(split="train", **kwargs)
             val_modes = [str(mode) for mode in (self.hparams.val_modes or [])]
             self.val_loader_names = []
@@ -106,6 +106,7 @@ class SCPMDataModule(pl.LightningDataModule):
                             clip=tuple(self.hparams.clip),
                             intensity_mode=self.hparams.intensity_mode,
                             normalized_volume_cache_dir=self.hparams.normalized_volume_cache_dir,
+                            include_annotations=True,
                             skip_missing_images=self.hparams.skip_missing_images,
                         )
                         name = "full_volume_froc"

@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 
 import hydra
+import pandas as pd
 import wandb
 from omegaconf import DictConfig, OmegaConf
 import pytorch_lightning as pl
@@ -177,8 +178,12 @@ def run(cfg: DictConfig) -> None:
         momentum=cfg.momentum,
         warmup_epochs=cfg.warmup_epochs,
         warmup_lr=cfg.warmup_lr,
+        lr_scheduler_name=cfg.get("lr_scheduler_name", "milestone"),
         lr_milestones=tuple(cfg.lr_milestones),
         lr_gamma=cfg.lr_gamma,
+        cosine_restart_t_0=cfg.get("cosine_restart_t_0", 50),
+        cosine_restart_t_mult=cfg.get("cosine_restart_t_mult", 1),
+        cosine_eta_min=cfg.get("cosine_eta_min", 1e-6),
         decode_threshold=cfg.decode_threshold,
         decode_topk=cfg.decode_topk,
         nms_threshold=cfg.nms_threshold,
@@ -200,7 +205,7 @@ def run(cfg: DictConfig) -> None:
         filename=str(cfg.get("checkpoint_filename", "epoch={epoch:03d}-val_loss={val/loss:.4f}")),
         monitor=checkpoint_monitor,
         mode=checkpoint_mode,
-        save_top_k=1,
+        save_top_k=cfg.get("checkpoint_save_top_k", 1),
         save_last=True,
         auto_insert_metric_name=False,
         every_n_epochs=checkpoint_every_n_epochs,
@@ -262,12 +267,78 @@ def run(cfg: DictConfig) -> None:
         if len(datamodule.test_ds) == 0:
             print("No test samples found after dataset filtering; skipping final test.")
             return
-        trainer.test(model, datamodule=datamodule, ckpt_path=checkpoint.best_model_path or "best")
+        ckpt_path = checkpoint.best_model_path or "best"
+        posthoc_top_k = int(cfg.get("posthoc_val_froc_top_k", 0) or 0)
+        if posthoc_top_k > 0 and checkpoint.best_k_models:
+            candidates = _top_checkpoint_paths(checkpoint, checkpoint_mode, posthoc_top_k)
+            selected = _select_checkpoint_by_validation_froc(cfg, candidates, exp_dir)
+            if selected is not None:
+                ckpt_path = selected
+        trainer.test(model, datamodule=datamodule, ckpt_path=ckpt_path)
     except Exception:
         status = "failed"
         raise
     finally:
         finalize_logger(logger, status)
+
+
+def _top_checkpoint_paths(checkpoint: ModelCheckpoint, mode: str, top_k: int) -> list[str]:
+    reverse = str(mode).lower() == "max"
+    scored = [(str(path), float(score.detach().cpu() if hasattr(score, "detach") else score)) for path, score in checkpoint.best_k_models.items()]
+    return [path for path, _ in sorted(scored, key=lambda item: item[1], reverse=reverse)[:top_k]]
+
+
+def _select_checkpoint_by_validation_froc(cfg: DictConfig, checkpoint_paths: list[str], exp_dir: Path) -> str | None:
+    if not checkpoint_paths:
+        return None
+    rows = []
+    val_froc_dm = SCPMDataModule(
+        csv_path=cfg.csv_path,
+        data_root=cfg.data_root,
+        batch_size=cfg.get("posthoc_val_froc_batch_size", None) or cfg.batch_size,
+        num_workers=cfg.num_workers,
+        crop_size=tuple(cfg.crop_size),
+        samples_per_volume=cfg.samples_per_volume,
+        clip=tuple(cfg.clip),
+        intensity_mode=cfg.get("intensity_mode", "hu"),
+        normalized_volume_cache_dir=cfg.get("normalized_volume_cache_dir", None),
+        positive_crop_prob=cfg.positive_crop_prob,
+        mask_path_column=cfg.mask_path_column,
+        skip_missing_images=cfg.skip_missing_images,
+        val_modes=("full_volume_froc",),
+        val_fixed_crop_seed=cfg.get("val_fixed_crop_seed", None),
+        val_random_crop_samples_per_volume=cfg.get("val_random_crop_samples_per_volume", 1),
+        test_full_volume=cfg.test_full_volume,
+        sliding_window_stride=tuple(cfg.sliding_window_stride),
+        pin_memory=cfg.accelerator in ("gpu", "cuda", "auto"),
+    )
+    for ckpt_path in checkpoint_paths:
+        candidate = SCPMLitModel.load_from_checkpoint(
+            ckpt_path,
+            evaluate_val_froc=True,
+            evaluate_froc=True,
+            evaluate_test_froc=cfg.get("evaluate_test_froc", None),
+            val_loader_names=("full_volume_froc",),
+            prediction_dir=f"posthoc_val_froc/{Path(ckpt_path).stem}",
+        )
+        candidate_dir = exp_dir / "posthoc_val_froc" / Path(ckpt_path).stem
+        evaluator = pl.Trainer(
+            accelerator=cfg.accelerator,
+            devices=cfg.devices,
+            precision=cfg.precision,
+            default_root_dir=str(candidate_dir),
+            logger=False,
+            callbacks=[],
+            num_sanity_val_steps=0,
+            enable_progress_bar=False,
+        )
+        metrics = evaluator.validate(candidate, datamodule=val_froc_dm, verbose=False)
+        mean_froc = float(metrics[0].get("val/mean_froc", float("-inf"))) if metrics else float("-inf")
+        rows.append({"checkpoint": ckpt_path, "val_mean_froc": mean_froc})
+    out_path = exp_dir / "posthoc_val_froc" / "top_loss_checkpoint_val_froc.csv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).sort_values("val_mean_froc", ascending=False).to_csv(out_path, index=False)
+    return max(rows, key=lambda row: row["val_mean_froc"])["checkpoint"] if rows else None
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="train_lightning")

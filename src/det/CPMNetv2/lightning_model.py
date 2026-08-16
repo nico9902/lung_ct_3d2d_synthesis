@@ -186,6 +186,10 @@ class CPMNetv2LitModel(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, cls_loss, shape_loss, offset_loss, iou_loss = self._loss(batch)
+        if not torch.isfinite(loss):
+            self.log("train/nonfinite_loss_batches", 1.0, prog_bar=True, on_step=True, on_epoch=True)
+            print(f"Skipping non-finite training loss at epoch={self.current_epoch}, batch_idx={batch_idx}")
+            return None
         self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True, batch_size=batch["image"].shape[0])
         self.log("train/cls_loss", cls_loss, on_step=False, on_epoch=True)
         self.log("train/shape_loss", shape_loss, on_step=False, on_epoch=True)
@@ -338,7 +342,10 @@ class CPMNetv2LitModel(pl.LightningModule):
                         str(output_dir),
                         self.froc_iou_threshold,
                     )
-                    frocs = [float(v) for v in result[-1]]
+                    frocs_raw = [float(v) for v in result[-1]]
+                    if any(not np.isfinite(v) for v in frocs_raw):
+                        print(f"{stage} FROC contained non-finite values; replacing them with 0.0")
+                    frocs = [0.0 if not np.isfinite(v) else float(v) for v in frocs_raw]
                     payload = {"ok": True, "mean_froc": float(np.mean(np.asarray(frocs))), "frocs": frocs}
                     print(f"{stage} FROC saved to {output_dir}; mean={payload['mean_froc']:.4f}")
                 except Exception as exc:
@@ -367,6 +374,12 @@ class CPMNetv2LitModel(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         if self.trainer.sanity_checking or not self.validation_predictions:
+            if not self.trainer.sanity_checking:
+                self.log("val/mean_froc", 0.0, prog_bar=True, on_step=False, on_epoch=True)
+                self.log("val_mean_froc", 0.0, logger=False, on_step=False, on_epoch=True)
+                mean_tensor = torch.tensor(0.0, device=self.device)
+                self.trainer.callback_metrics["val/mean_froc"] = mean_tensor
+                self.trainer.callback_metrics["val_mean_froc"] = mean_tensor
             return
         rows = self._gather_prediction_rows(self.validation_predictions)
         path = self._write_predictions(rows, "val")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
@@ -67,8 +68,12 @@ class SCPMLitModel(pl.LightningModule):
         momentum: float = 0.9,
         warmup_epochs: int = 0,
         warmup_lr: float = 1e-4,
+        lr_scheduler_name: str = "milestone",
         lr_milestones: tuple[int, ...] = (80, 150),
         lr_gamma: float = 0.1,
+        cosine_restart_t_0: int = 50,
+        cosine_restart_t_mult: int = 1,
+        cosine_eta_min: float = 1e-6,
         decode_threshold: float = 0.2,
         decode_topk: int = 100,
         nms_threshold: float = 0.05,
@@ -282,6 +287,8 @@ class SCPMLitModel(pl.LightningModule):
     def _ground_truth_by_series(self, dataset_attr: str = "test_ds") -> tuple[dict[str, np.ndarray], int]:
         datamodule = self.trainer.datamodule if self.trainer else None
         dataset = getattr(datamodule, dataset_attr, None)
+        if isinstance(dataset, (list, tuple)):
+            dataset = next((item for item in dataset if getattr(item, "groups", None)), None)
         groups = getattr(dataset, "groups", None)
         if not groups:
             return {}, 0
@@ -402,17 +409,50 @@ class SCPMLitModel(pl.LightningModule):
         warmup_epochs = int(self.hparams.warmup_epochs)
         warmup_lr = float(self.hparams.warmup_lr)
         base_lr = float(self.hparams.lr)
-        milestones = tuple(int(v) for v in self.hparams.lr_milestones)
-        gamma = float(self.hparams.lr_gamma)
+        scheduler_name = str(self.hparams.lr_scheduler_name)
 
-        def lr_lambda(epoch: int) -> float:
-            if warmup_epochs > 0 and epoch < warmup_epochs:
-                return warmup_lr / base_lr
-            factor = 1.0
-            for milestone in milestones:
-                if epoch >= milestone:
-                    factor *= gamma
-            return factor
+        def warmup_factor(epoch: int) -> float:
+            if warmup_epochs <= 0 or epoch >= warmup_epochs:
+                return 1.0
+            warmup_start = warmup_lr / base_lr
+            progress = float(epoch) / float(warmup_epochs)
+            return warmup_start + (1.0 - warmup_start) * progress
+
+        if scheduler_name == "milestone":
+            milestones = tuple(int(v) for v in self.hparams.lr_milestones)
+            gamma = float(self.hparams.lr_gamma)
+
+            def lr_lambda(epoch: int) -> float:
+                if warmup_epochs > 0 and epoch < warmup_epochs:
+                    return warmup_lr / base_lr
+                factor = 1.0
+                for milestone in milestones:
+                    if epoch >= milestone:
+                        factor *= gamma
+                return factor
+
+        elif scheduler_name == "warmup_cosine_restarts":
+            eta_min_factor = float(self.hparams.cosine_eta_min) / base_lr
+            t_0 = max(1, int(self.hparams.cosine_restart_t_0))
+            t_mult = max(1, int(self.hparams.cosine_restart_t_mult))
+
+            def lr_lambda(epoch: int) -> float:
+                if warmup_epochs > 0 and epoch < warmup_epochs:
+                    return warmup_factor(epoch)
+                t_cur = max(0, epoch - warmup_epochs)
+                t_i = t_0
+                if t_mult == 1:
+                    cycle_pos = t_cur % t_i
+                else:
+                    cycle_pos = t_cur
+                    while cycle_pos >= t_i:
+                        cycle_pos -= t_i
+                        t_i *= t_mult
+                cosine = 0.5 * (1.0 + math.cos(math.pi * float(cycle_pos) / float(t_i)))
+                return eta_min_factor + (1.0 - eta_min_factor) * cosine
+
+        else:
+            raise ValueError(f"Unsupported lr_scheduler_name: {scheduler_name}")
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
         return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}

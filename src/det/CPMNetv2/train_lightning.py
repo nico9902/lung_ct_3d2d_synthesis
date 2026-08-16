@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.det.CPMNetv2.lidc_datamodule import LIDCCPMNetDataModule
+from src.det.CPMNetv2.luna16_datamodule import Luna16CPMNetDataModule
 from src.det.CPMNetv2.lightning_model import CPMNetv2LitModel
 
 
@@ -71,26 +72,48 @@ def run(cfg: DictConfig):
     exp_dir.mkdir(parents=True, exist_ok=True)
 
     pin_memory = cfg.accelerator in ("gpu", "cuda", "auto")
-    datamodule = LIDCCPMNetDataModule.from_split_csv(
-        csv_path=cfg.csv_path,
-        images_dir=cfg.images_dir,
-        annotations_dir=cfg.annotations_dir,
-        batch_size=cfg.batch_size,
-        view=cfg.view,
-        num_workers=cfg.num_workers,
-        crop_size=list(cfg.crop_size),
-        overlap_size=list(cfg.overlap_size),
-        spacing=list(cfg.spacing),
-        num_samples=cfg.num_samples,
-        pin_memory=pin_memory,
-        labels_csv=cfg.labels_csv,
-        val_full_volume=cfg.get("val_full_volume", False),
-    )
+    dataset_name = str(cfg.get("dataset_name", "lidc")).lower()
+    if dataset_name == "luna16":
+        datamodule = Luna16CPMNetDataModule.from_split_csv(
+            csv_path=cfg.csv_path,
+            images_dir=cfg.images_dir,
+            labels_csv=cfg.labels_csv,
+            batch_size=cfg.batch_size,
+            num_workers=cfg.num_workers,
+            crop_size=list(cfg.crop_size),
+            overlap_size=list(cfg.overlap_size),
+            spacing=list(cfg.spacing),
+            num_samples=cfg.num_samples,
+            pin_memory=pin_memory,
+            val_full_volume=cfg.get("val_full_volume", False),
+        )
+    elif dataset_name == "lidc":
+        datamodule = LIDCCPMNetDataModule.from_split_csv(
+            csv_path=cfg.csv_path,
+            images_dir=cfg.images_dir,
+            annotations_dir=cfg.annotations_dir,
+            batch_size=cfg.batch_size,
+            view=cfg.view,
+            num_workers=cfg.num_workers,
+            crop_size=list(cfg.crop_size),
+            overlap_size=list(cfg.overlap_size),
+            spacing=list(cfg.spacing),
+            num_samples=cfg.num_samples,
+            pin_memory=pin_memory,
+            labels_csv=cfg.labels_csv,
+            val_full_volume=cfg.get("val_full_volume", False),
+        )
+    else:
+        raise ValueError(f"Unsupported dataset_name={dataset_name!r}. Use 'lidc' or 'luna16'.")
 
     model = CPMNetv2LitModel(
         crop_size=list(cfg.crop_size),
         spacing=list(cfg.spacing),
         lr=cfg.lr,
+        warmup_multiplier=cfg.warmup_multiplier,
+        warmup_epochs=cfg.warmup_epochs,
+        cosine_t_max=cfg.cosine_t_max,
+        eta_min=cfg.eta_min,
         topk=cfg.topk,
         lambda_cls=cfg.lambda_cls,
         lambda_offset=cfg.lambda_offset,

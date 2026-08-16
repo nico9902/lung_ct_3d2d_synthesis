@@ -1,4 +1,5 @@
 csv_path: data/dataset_nodule_mean.csv
+dataset_name: lidc
 images_dir: /ssd2/domenico/datasets/lidc_process
 annotations_dir: /ssd2/domenico/datasets/lidc_process
 labels_csv: /ssd2/domenico/datasets/lidc_process/lidc_labels.csv
@@ -38,6 +39,10 @@ accumulate_grad_batches: 1
 num_sanity_val_steps: 0
 
 lr: 0.01
+warmup_multiplier: 10.0
+warmup_epochs: 2
+cosine_t_max: 300
+eta_min: 1e-6
 topk: 5
 num_samples: 1
 val_full_volume: false

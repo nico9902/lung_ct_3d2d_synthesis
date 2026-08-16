@@ -41,8 +41,11 @@ checkpoint_mode: min
 checkpoint_filename: epoch={epoch:03d}-val_loss={val/loss:.4f}
 checkpoint_every_n_epochs: null
 checkpoint_start_epoch: 1
+checkpoint_save_top_k: 1
 val_froc_start_epoch: null
 val_froc_before_start_every_n_epoch: null
+posthoc_val_froc_top_k: 0
+posthoc_val_froc_batch_size: null
 
 use_wandb: true
 wandb_project: lung_ct_3d2d_synthesis_detection
@@ -81,10 +84,14 @@ optimizer_name: sgd
 momentum: 0.9
 warmup_epochs: 20
 warmup_lr: 0.0001
+lr_scheduler_name: milestone
 lr_milestones:
   - 80
   - 150
 lr_gamma: 0.1
+cosine_restart_t_0: 50
+cosine_restart_t_mult: 1
+cosine_eta_min: 0.000001
 
 stride: 2
 positive_topk: 7
