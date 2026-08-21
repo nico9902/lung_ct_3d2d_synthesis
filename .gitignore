@@ -1,13 +1,19 @@
 # macOS / editor files
 .DS_Store
+**/.DS_Store
 .vscode/
+.idea/
 
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+.matplotlib_cache/
 
 # Virtual environments
 venv/
@@ -38,15 +44,38 @@ runs/
 logs/
 *.log
 *_log_.txt
+events.out.tfevents.*
 
 # Model checkpoints and weights
 *.ckpt
 *.pth
 *.pt
 *.onnx
+*.safetensors
 
 # Large generated notebooks / notebook checkpoints
 .ipynb_checkpoints/
+
+# LaTeX build artifacts. Keep source .tex, figures, and optionally final PDFs.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.run.xml
+*.spl
+*.synctex.gz
+*.toc
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
 
 # Local secrets / environment config
 .env

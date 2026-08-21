@@ -1,0 +1,7 @@
+method,input_tensor_per_patient,input_scalar_values,relative_to_single_2d,relative_to_3d_fitpad,forward_passes_per_patient
+adaptive_rbf_or_shepard,3x256x384,294912,1.00,0.0159,1
+detector_cpmnetv2_mean_scan,48.40x1x64x128x128,50746245,172.07,2.73,48.40
+adaptive_rbf_detector_inclusive,48.40x1x64x128x128 + 3x256x384,51041157,173.08,2.75,49.40
+mip_or_central_slice,3x256x384,294912,1.00,0.0159,1
+detection_crop_mil_top4,4x3x256x384,1179648,4.00,0.0635,4
+resnet18_3d_fitpad,1x224x288x288,18579456,63.00,1.00,1

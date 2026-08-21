@@ -49,6 +49,7 @@ from src.luna16_synthetic_2d.saliency import (
     mid_slice_plane,
     sample_empirical_pseudo_nodules,
     sample_pseudo_regions_inside_lung,
+    stable_patient_seed,
 )
 
 
@@ -190,6 +191,89 @@ def detection_control_points(
         points.extend(clipped.tolist())
 
     return np.asarray(points, dtype=np.float32)
+
+
+def fixed_control_detections(
+    reference_detections: pd.DataFrame,
+    top_k: int,
+    volume_shape: tuple[int, int, int],
+) -> pd.DataFrame:
+    depth, height, width = volume_shape
+    count = max(1, min(int(top_k), len(reference_detections) if reference_detections is not None else int(top_k)))
+    fixed_yx = [
+        (0.35, 0.35),
+        (0.35, 0.65),
+        (0.65, 0.35),
+        (0.65, 0.65),
+        (0.50, 0.50),
+        (0.25, 0.50),
+        (0.75, 0.50),
+        (0.50, 0.25),
+        (0.50, 0.75),
+        (0.25, 0.25),
+    ]
+    if reference_detections is not None and not reference_detections.empty and "radius" in reference_detections.columns:
+        radius = float(pd.to_numeric(reference_detections["radius"], errors="coerce").dropna().median())
+    else:
+        radius = 8.0
+    radius = max(radius, 1.0)
+
+    rows = []
+    for index in range(count):
+        y_frac, x_frac = fixed_yx[index % len(fixed_yx)]
+        rows.append(
+            {
+                "seriesuid": str(reference_detections["seriesuid"].iloc[0]) if reference_detections is not None and not reference_detections.empty else "",
+                "coordZ": float((depth - 1) * 0.50),
+                "coordY": float((height - 1) * y_frac),
+                "coordX": float((width - 1) * x_frac),
+                "radius": radius,
+                "probability": 1.0,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def random_control_detections(
+    patient_id: str,
+    reference_detections: pd.DataFrame,
+    top_k: int,
+    volume_shape: tuple[int, int, int],
+    lung_mask: np.ndarray | None,
+) -> pd.DataFrame:
+    depth, height, width = volume_shape
+    count = max(1, min(int(top_k), len(reference_detections) if reference_detections is not None else int(top_k)))
+    rng = np.random.default_rng(stable_patient_seed(patient_id) + 104729)
+
+    if reference_detections is not None and not reference_detections.empty and "radius" in reference_detections.columns:
+        reference_radii = pd.to_numeric(reference_detections["radius"], errors="coerce").dropna().to_numpy(dtype=float)
+    else:
+        reference_radii = np.asarray([], dtype=float)
+    if len(reference_radii) == 0:
+        reference_radii = np.asarray([8.0], dtype=float)
+
+    valid_points = None
+    if lung_mask is not None and np.any(lung_mask):
+        valid_points = np.argwhere(lung_mask)
+    rows = []
+    for index in range(count):
+        if valid_points is not None and len(valid_points) > 0:
+            z, y, x = valid_points[int(rng.integers(0, len(valid_points)))]
+        else:
+            z = int(rng.integers(0, depth))
+            y = int(rng.integers(0, height))
+            x = int(rng.integers(0, width))
+        rows.append(
+            {
+                "seriesuid": patient_id,
+                "coordZ": float(z),
+                "coordY": float(y),
+                "coordX": float(x),
+                "radius": float(max(reference_radii[index % len(reference_radii)], 1.0)),
+                "probability": 1.0,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def detection_shepard_disks(detections: pd.DataFrame, volume_shape: tuple[int, int, int]) -> np.ndarray:
@@ -432,6 +516,33 @@ def save_detector_surfaces(args: argparse.Namespace, dataset: LUNA16NiftiDataset
                     fallback_mode = "mid_slice"
             else:
                 selected = detections.head(args.top_k).reset_index(drop=True)
+                surface_source = "detector"
+                if args.control_point_mode == "fixed":
+                    selected = fixed_control_detections(selected, args.top_k, volume_shape=(depth, h, w))
+                    surface_source = "fixed_control_points"
+                    print(f"Using fixed control point ablation with {len(selected)} synthetic detections.")
+                elif args.control_point_mode == "random":
+                    if lung_mask is None:
+                        lung_mask = get_lung_mask(
+                            volume_np,
+                            model_name=args.lungmask_model_name,
+                            force_cpu=args.lungmask_force_cpu,
+                            method=args.lung_mask_method,
+                            normalized_air_threshold=args.normalized_air_threshold,
+                            hu_air_min=args.hu_air_min,
+                            hu_air_max=args.hu_air_max,
+                            body_threshold_percentile=args.body_threshold_percentile,
+                            lung_component_count=args.lung_component_count,
+                        )
+                    selected = random_control_detections(
+                        patient_id,
+                        selected,
+                        args.top_k,
+                        volume_shape=(depth, h, w),
+                        lung_mask=lung_mask,
+                    )
+                    surface_source = "random_control_points"
+                    print(f"Using random control point ablation with {len(selected)} synthetic detections.")
                 matrix = detection_control_points(
                     selected,
                     num_contour_points=args.num_contour_points,
@@ -443,10 +554,29 @@ def save_detector_surfaces(args: argparse.Namespace, dataset: LUNA16NiftiDataset
                     f"({1 + max(0, int(args.num_contour_points))} per detection) from fold {args.fold}; "
                     f"top probability={float(selected['probability'].max()):.4f}."
                 )
+                fallback_mode = surface_source
 
             if fallback_mode in {"detector", "mid_slice"}:
                 if fallback_mode == "mid_slice":
                     shepard_detections = None
+                matrix, point_labels, z_surface_float, z_surface = fit_surface_grid(
+                    matrix,
+                    h,
+                    w,
+                    depth,
+                    args.num_boundary_anchors,
+                    args.rbf_smooth,
+                    lung_mask=lung_mask,
+                    patient_id=patient_id,
+                    use_lung_volume_anchors=args.use_lung_volume_anchors,
+                    lung_anchor_erode_iterations=args.lung_anchor_erode_iterations,
+                    snap_surface_to_lung=args.snap_surface_to_lung,
+                    anchor_min_lung_area_fraction=args.anchor_min_lung_area_fraction,
+                    surface_method=args.surface_method,
+                    shepard_power=args.shepard_power,
+                    shepard_detections=shepard_detections,
+                )
+            elif fallback_mode in {"fixed_control_points", "random_control_points"}:
                 matrix, point_labels, z_surface_float, z_surface = fit_surface_grid(
                     matrix,
                     h,
@@ -536,6 +666,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-path", default="outputs/luna16_saliency_synthetic_detector_top5")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--num-contour-points", type=int, default=4)
+    parser.add_argument(
+        "--control-point-mode",
+        choices=("detector", "fixed", "random"),
+        default="detector",
+        help=(
+            "Ablation mode for scans with detector candidates. 'detector' uses top-k detector control points; "
+            "'fixed' replaces them with fixed anatomical positions; 'random' replaces them with seeded random points."
+        ),
+    )
     parser.add_argument(
         "--min-probability",
         type=float,

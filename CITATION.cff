@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this code or the adaptive 2D lung CT synthesis pipeline, please cite this repository and the associated manuscript."
+title: "Detection-Guided Adaptive 2D Synthesis for Patient-Level Lung Malignancy Assessment from CT Volumes"
+authors:
+  - family-names: "Paolo"
+    given-names: "Domenico"
+  - family-names: "Bria"
+    given-names: "Alessandro"
+  - family-names: "Marrocco"
+    given-names: "Claudio"
+  - family-names: "Russo"
+    given-names: "Ciro"
+  - family-names: "Cantone"
+    given-names: "Marco"
+repository-code: "https://github.com/nico9902/lung_ct_3d2d_synthesis"
+type: software
+date-released: "2026-08-21"
+keywords:
+  - lung CT
+  - pulmonary nodules
+  - adaptive projection
+  - radial basis functions
+  - patient-level malignancy

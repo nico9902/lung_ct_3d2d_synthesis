@@ -26,6 +26,7 @@ TOP_K="${TOP_K:-7}"
 NUM_CONTOUR_POINTS="${NUM_CONTOUR_POINTS:-4}"
 MIN_PROBABILITY="${MIN_PROBABILITY:-0.3}"
 SURFACE_METHOD="${SURFACE_METHOD:-rbf}"
+CONTROL_POINT_MODE="${CONTROL_POINT_MODE:-detector}"
 RBF_SMOOTH="${RBF_SMOOTH:-0.1}"
 SHEPARD_POWER="${SHEPARD_POWER:-2.0}"
 NUM_BOUNDARY_ANCHORS="${NUM_BOUNDARY_ANCHORS:-24}"
@@ -126,6 +127,7 @@ for FOLD in ${FOLDS}; do
   echo "  Top-k: ${TOP_K}"
   echo "  Min probability: ${MIN_PROBABILITY:-none}"
   echo "  Surface method: ${SURFACE_METHOD}"
+  echo "  Control point mode: ${CONTROL_POINT_MODE}"
   echo "  Detector-negative fallback: ${FALLBACK_NO_NODULE}"
   echo "  Skip existing: ${SKIP_EXISTING}"
   echo "  Control points per detection: $((1 + NUM_CONTOUR_POINTS))"
@@ -141,6 +143,7 @@ for FOLD in ${FOLDS}; do
     --save-path "${OUTPUT_ROOT}" \
     --top-k "${TOP_K}" \
     --num-contour-points "${NUM_CONTOUR_POINTS}" \
+    --control-point-mode "${CONTROL_POINT_MODE}" \
     --surface-method "${SURFACE_METHOD}" \
     --rbf-smooth "${RBF_SMOOTH}" \
     --shepard-power "${SHEPARD_POWER}" \

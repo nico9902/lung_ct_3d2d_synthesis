@@ -1,0 +1,9 @@
+method,representation,backbone,input_per_patient,trainable_params,gmacs_per_patient,gflops_2xmac_per_patient,stored_dataset_size,observed_epoch_time_seconds,notes
+adaptive_rbf_classifier_only,detector-guided synthetic 2D surface,EfficientNetV2-S,1 RGB 256x384 image,20178769,5.5774,11.1549,394M,,"Classifier-side cost after detector predictions/synthetic image have been generated; storage measured on /ssd2."
+adaptive_shepard_classifier_only,detector-guided synthetic 2D surface,EfficientNetV2-S,1 RGB 256x384 image,20178769,5.5774,11.1549,395M,,"Same classifier-side cost as RBF; interpolation differs during synthetic generation."
+adaptive_rbf_detector_inclusive,detector + RBF synthetic 2D + classifier,CPMNetv2 + EfficientNetV2-S,mean 48.40 detector crops + 1 RGB 256x384 image,36703768,16641.3731,33282.7463,394M,,"Detector-inclusive inference estimate; detector dominates. Synthesis CPU/interpolation cost is not included in neural-network GFLOPs."
+mip_axial,non-adaptive axial MIP,EfficientNetV2-S,1 RGB 256x384 image,20178769,5.5774,11.1549,63M,,"Same classifier-side tensor size as adaptive 2D, weaker representation."
+mip_triview,non-adaptive tri-view MIP,EfficientNetV2-S,1 RGB 256x384 image,20178769,5.5774,11.1549,104M,,"Stored as one 2D input; classifier-side cost comparable to other 2D baselines."
+central_slice,central axial slice,EfficientNetV2-S,1 RGB 256x384 image,20178769,5.5774,11.1549,55M,,"Cheapest 2D baseline but loses off-center nodules."
+detection_crop_mil,top4 detector-centered crops with attention pooling,EfficientNetV2-S,up to 4 RGB crops per patient,20500000,22.3098,44.6196,,,Requires up to 4 EfficientNetV2-S forward passes per patient.
+resnet18_3d,fit-pad full volume 224x288x288,R3D-18,1 volume 1x224x288x288,33147969,3679.9214,7359.8427,54G,254.94,"Epoch time measured over 1000 fold-epochs on A100; dataset size is LUNA16_preprocessed."

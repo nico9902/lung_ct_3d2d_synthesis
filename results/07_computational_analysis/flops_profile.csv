@@ -1,0 +1,11 @@
+method,backbone,input,macs,gmacs,gflops_2xmac,relative_gflops_vs_adaptive_rbf,notes
+adaptive_rbf_classifier_only,EfficientNetV2-S,1x3x256x384,5577447680,5.5774,11.1549,1.00,Classifier-side cost after detector predictions/synthetic image are available.
+adaptive_shepard_classifier_only,EfficientNetV2-S,1x3x256x384,5577447680,5.5774,11.1549,1.00,Same backbone and input size as Adaptive RBF.
+detector_cpmnetv2_per_crop,CPMNetv2,1x1x64x128x128,343748378624,343.7484,687.4968,61.63,Detector sliding-window crop; crop_size 64x128x128.
+detector_cpmnetv2_per_scan_mean,CPMNetv2,mean 48.40 crops/scan,16635795629335,16635.7957,33271.5914,2982.69,Mean over 888 LUNA16 preprocessed scans.
+adaptive_rbf_detector_inclusive,CPMNetv2 + EfficientNetV2-S,mean detector scan + 1x3x256x384,16641373077015,16641.3731,33282.7463,2983.69,Neural-network GFLOPs only; RBF interpolation/synthetic rendering CPU cost not included.
+mip_axial,EfficientNetV2-S,1x3x256x384,5577447680,5.5774,11.1549,1.00,Same classifier-side cost as Adaptive RBF.
+mip_triview,EfficientNetV2-S,1x3x256x384,5577447680,5.5774,11.1549,1.00,Stored as one 2D image input in the implemented baseline.
+central_slice,EfficientNetV2-S,1x3x256x384,5577447680,5.5774,11.1549,1.00,Same classifier-side cost as Adaptive RBF.
+detection_crop_mil_top4,EfficientNetV2-S,4x(1x3x256x384),22309790720,22.3098,44.6196,4.00,Computed as four EfficientNetV2-S crop forward passes.
+resnet18_3d_fitpad,R3D-18,1x1x224x288x288,3679921373696,3679.9214,7359.8427,659.78,Modified 1-channel R3D-18 with binary classifier.

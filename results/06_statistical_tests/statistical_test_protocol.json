@@ -1,0 +1,52 @@
+{
+  "bootstrap_resamples": 5000,
+  "bootstrap": "patient-level stratified bootstrap over pooled 10-fold test predictions",
+  "auc_test": "paired DeLong test",
+  "binary_test": "exact McNemar/binomial test on paired 0.5-threshold predictions",
+  "multiple_testing": "Benjamini-Hochberg FDR across planned pairwise comparisons",
+  "methods": {
+    "adaptive_rbf_effnetv2s": "Adaptive RBF, detector-guided, top4/thr0.50, EfficientNetV2-S",
+    "adaptive_shepard_effnetv2s": "Adaptive Shepard, detector-guided, top4/thr0.50, EfficientNetV2-S",
+    "mip_axial_effnetv2s": "MIP axial, EfficientNetV2-S",
+    "mip_triview_effnetv2s": "MIP tri-view, EfficientNetV2-S",
+    "central_slice_effnetv2s": "Central axial slice, EfficientNetV2-S",
+    "crop_mil_attention_effnetv2s": "Detector crop-MIL attention, EfficientNetV2-S",
+    "fixed_control_rbf_effnetv2s": "Fixed-control RBF, EfficientNetV2-S",
+    "random_control_rbf_effnetv2s": "Random-control RBF, EfficientNetV2-S",
+    "resnet18_3d_fitpad": "3D ResNet18, fit-pad 224x288x288"
+  },
+  "comparisons": [
+    [
+      "adaptive_rbf_effnetv2s",
+      "adaptive_shepard_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "mip_axial_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "mip_triview_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "central_slice_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "crop_mil_attention_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "fixed_control_rbf_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "random_control_rbf_effnetv2s"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "resnet18_3d_fitpad"
+    ]
+  ]
+}
