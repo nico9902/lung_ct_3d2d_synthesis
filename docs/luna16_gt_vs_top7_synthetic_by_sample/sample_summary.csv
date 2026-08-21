@@ -1,2 +1,0 @@
-samples,out_dir,rbf_root,shepard_root
-1186,docs/luna16_gt_vs_top7_synthetic_by_sample,data/luna16_saliency_synthetic_detector_top7_minprob0.3_rbf,data/luna16_saliency_synthetic_detector_top7_minprob0.3_shepard

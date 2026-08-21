@@ -1,8 +1,0 @@
-# Experiment Configuration
-
-name: "gravity_space_detection"
-base_dir: "outputs"
-wandb:
-  project: "lung_ct_3d2d_synthesis_detection"
-  entity: "domenico-paolo1999"
-  enabled: true
