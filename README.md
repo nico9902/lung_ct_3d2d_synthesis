@@ -18,24 +18,19 @@ The proposed pipeline is:
 5. Train patient-level 2D classifiers on the synthesized images.
 6. Compare against non-adaptive 2D baselines, detector crop-MIL, and a 3D ResNet18 volumetric baseline.
 
-The current paper draft is in [`latex/main.tex`](latex/main.tex), with the compiled PDF in [`latex/main.pdf`](latex/main.pdf).
-
 ## Repository Layout
 
 ```text
 bash/                         Experiment launch scripts
-docs/                         Method notes, QC reports, reproducibility notes
-latex/                        Paper draft and figures
 results/                      Curated result summaries for paper writing
-src/cls/                      Generic 2D classification components
-src/det/                      Detector-related code and integrations
+src/det/CPMNetv2/             Detector code used for nodule localization
 src/luna16_synthetic_2d/      Adaptive 2D synthesis and 2D backbone experiments
 src/luna16_detection_mil/     Detector-crop MIL baseline
 src/luna16_volume_3d/         3D ResNet18 volumetric baseline
 src/prs/                      Preprocessing and label-generation utilities
 ```
 
-Large local folders such as `data/`, `outputs/`, `wandb/`, `wandb2/`, model checkpoints, medical images, and NumPy arrays are intentionally ignored by Git.
+Large local folders such as `data/`, `outputs/`, `docs/`, `others/`, `latex/`, `wandb/`, `wandb2/`, model checkpoints, medical images, and NumPy arrays are intentionally ignored by Git.
 
 ## Main Results
 
@@ -85,19 +80,6 @@ data/LIDC-IDRI files/
 outputs/
 ```
 
-See [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) for the expected artifact organization and the main experiment commands.
-
-## Paper Draft
-
-The LaTeX manuscript is kept in [`latex/`](latex/). To compile:
-
-```bash
-cd latex
-latexmk -pdf -interaction=nonstopmode main.tex
-```
-
-The current method figure is [`latex/figures/Method.pdf`](latex/figures/Method.pdf).
-
 ## Notes For GitHub Use
 
 Before committing, check:
@@ -106,5 +88,4 @@ Before committing, check:
 git status --short
 ```
 
-Do not commit patient data, checkpoints, W&B runs, generated synthetic datasets, or large binary arrays. The repository is intended to track code, paper sources, scripts, and curated result summaries only.
-
+Do not commit patient data, checkpoints, W&B runs, generated synthetic datasets, paper drafts, personal notes, or large binary arrays. The repository is intended to track code, reusable scripts, public documentation, and curated result summaries only.

@@ -24,6 +24,8 @@ env/
 data/
 datasets/
 dataset/
+docs/
+others/
 
 # Medical imaging / array artifacts
 *.nii
@@ -56,7 +58,8 @@ events.out.tfevents.*
 # Large generated notebooks / notebook checkpoints
 .ipynb_checkpoints/
 
-# LaTeX build artifacts. Keep source .tex, figures, and optionally final PDFs.
+# Paper drafts and LaTeX build artifacts are kept local.
+latex/
 *.aux
 *.bbl
 *.bcf
@@ -84,3 +87,52 @@ mcp.json
 
 # Local notes
 GITHUB_WORKFLOW.md
+TO_DO.txt
+
+# Non-paper exploratory code and launchers
+bash/classification/
+bash/gravitynet/
+bash/scpmnet/
+bash/luna16_slice_attention_2p5d/
+bash/cpmnetv2/cpmnetv2_luna16_holdout_val_froc.sh
+bash/cpmnetv2/cpmnetv2_train_lightning_hydra.sh
+bash/run_luna16_detector_saliency.sh
+bash/run_luna16_detector_saliency_top3*
+bash/run_luna16_detector_saliency_top7*
+bash/run_luna16_detector_saliency_top3_top4_minprob0.5_all.sh
+bash/run_luna16_saliency.sh
+bash/synthetic_gen.sh
+src/cls/
+src/det/GravitySpace/
+src/det/SCPMNet/
+src/luna16_slice_attention_2p5d/
+src/det/CPMNetv2/Froc_10*.jpg
+src/det/CPMNetv2/check_luna16_datamodule.py
+src/det/CPMNetv2/visualize_training_sample.py
+src/det/CPMNetv2/train_CPMv2_MRA*
+src/det/CPMNetv2/train_CPMv2_RibFrac*
+src/det/CPMNetv2/dataload/dataset_rib.py
+
+# Local exploratory notebooks and legacy root scripts
+*.ipynb
+compute_FROC_unet3D.py
+dicom_to_nifti.py
+generate_lidc_labels.py
+plot_z_distribution.py
+saliency.py
+info_LUNA16.txt
+
+# Non-paper synthetic visualization/QC helpers
+src/luna16_synthetic_2d/create_*mosaic*.py
+src/luna16_synthetic_2d/create_detection_slice_mosaics.py
+src/luna16_synthetic_2d/export_class_rankings.py
+src/luna16_synthetic_2d/export_gradcam.py
+src/luna16_synthetic_2d/export_gt_synthetic_samples.py
+src/luna16_synthetic_2d/build_nodule_position_distribution.py
+src/luna16_synthetic_2d/compare_synthetic_surface_quality.py
+src/luna16_synthetic_2d/README_saliency.md
+src/luna16_synthetic_2d/run_gradcam_*.sh
+src/luna16_synthetic_2d/run_backbones_det_top3*
+src/luna16_synthetic_2d/run_backbones_det_top7*
+src/luna16_synthetic_2d/run_luna16_detector_normauto_a100.sh
+src/luna16_synthetic_2d/run_luna16_fpr_top100.sh
