@@ -79,13 +79,3 @@ data/LUNA16_preprocessed/
 data/LIDC-IDRI files/
 outputs/
 ```
-
-## Notes For GitHub Use
-
-Before committing, check:
-
-```bash
-git status --short
-```
-
-Do not commit patient data, checkpoints, W&B runs, generated synthetic datasets, paper drafts, personal notes, or large binary arrays. The repository is intended to track code, reusable scripts, public documentation, and curated result summaries only.
