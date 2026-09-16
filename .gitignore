@@ -27,6 +27,8 @@ data/
 datasets/
 dataset/
 docs/
+notebooks/
+scripts/
 others/
 
 # Medical imaging / array artifacts
