@@ -79,3 +79,28 @@ data/LUNA16_preprocessed/
 data/LIDC-IDRI files/
 outputs/
 ```
+
+## Grad-CAM Explanations
+
+After training a 2D synthetic-image classifier, Grad-CAM figures can be exported on the server with:
+
+```bash
+python -m src.luna16_synthetic_2d.explain_gradcam \
+  --checkpoint outputs/luna16_synthetic_2d_top4_minprob0.5_rbf/fold_0/efficientnet_v2_s/checkpoints/best.ckpt \
+  --synthetic-images-dir data/luna16_saliency_synthetic_detector_top4_minprob0.5_rbf \
+  --split-csv data/LUNA16_preprocessed/cv_splits/luna16_classification_fold0.csv \
+  --fold 0 \
+  --backbone efficientnet_v2_s \
+  --processed-dir data/LUNA16_preprocessed \
+  --clip-gt-to-lung \
+  --exclude-sample-ids 120188208010880 \
+  --selection balanced_highest_score \
+  --target-class predicted \
+  --require-malignant-gt-hit \
+  --require-gt-inside-visible-lung \
+  --figure-layout paper_overlay \
+  --max-samples 24 \
+  --output-dir outputs/luna16_synthetic_2d_gradcam/fold_0_efficientnet_v2_s
+```
+
+The script writes per-sample input, ground-truth nodule-mask overlay when available, heatmap, overlay, paper-style multi-panel figures, a class-balanced `gradcam_summary.png`, a `gradcam_manifest.csv`, and a markdown report. GT nodule masks are clipped to the available lung mask by default to avoid displaying annotations outside the lung. Balanced selections keep equal class counts; if one fold has too few malignant or benign cases, fewer than `--max-samples` examples are exported unless `--balance-fill-shortfall` is passed. With `--require-malignant-gt-hit`, malignant examples are kept only when the Grad-CAM hotspot overlaps the clipped ground-truth nodule mask. With `--require-gt-inside-visible-lung`, samples whose projected GT mask falls outside the visible lung silhouette are discarded.

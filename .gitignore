@@ -113,6 +113,20 @@ src/det/CPMNetv2/train_CPMv2_MRA*
 src/det/CPMNetv2/train_CPMv2_RibFrac*
 src/det/CPMNetv2/dataload/dataset_rib.py
 
+# Paper experiment: 2.5D slice-attention baseline launch code
+!bash/luna16_slice_attention_2p5d/
+bash/luna16_slice_attention_2p5d/*
+!bash/luna16_slice_attention_2p5d/run_slice_attention_effnetv2s.sh
+!src/luna16_slice_attention_2p5d/
+src/luna16_slice_attention_2p5d/*
+!src/luna16_slice_attention_2p5d/__init__.py
+!src/luna16_slice_attention_2p5d/dataset.py
+!src/luna16_slice_attention_2p5d/datamodule.py
+!src/luna16_slice_attention_2p5d/model.py
+!src/luna16_slice_attention_2p5d/lightning_model.py
+!src/luna16_slice_attention_2p5d/train.py
+!src/luna16_slice_attention_2p5d/aggregate.py
+
 # Local exploratory notebooks and legacy root scripts
 *.ipynb
 compute_FROC_unet3D.py

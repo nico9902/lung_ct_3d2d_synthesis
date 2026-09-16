@@ -34,6 +34,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-probability", type=float, default=0.5)
     parser.add_argument("--crop-size-mm", type=int, default=64)
     parser.add_argument("--crop-image-size", type=int, default=224)
+    parser.add_argument(
+        "--crop-intensity-mode",
+        default="lung_window",
+        choices=["lung_window", "preprocessed_uint8"],
+        help=(
+            "How detector crops are converted to uint8 before ToTensor/MinMaxScale. "
+            "Use preprocessed_uint8 for LUNA16_preprocessed volumes already stored as uint8 [0,255]."
+        ),
+    )
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -149,6 +158,7 @@ def main() -> None:
         min_probability=args.min_probability,
         crop_size_mm=args.crop_size_mm,
         crop_image_size=args.crop_image_size,
+        crop_intensity_mode=args.crop_intensity_mode,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
     )

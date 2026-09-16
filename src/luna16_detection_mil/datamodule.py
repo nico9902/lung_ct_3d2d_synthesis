@@ -24,6 +24,7 @@ class DetectionMILDataModule(pl.LightningDataModule):
         min_probability: float,
         crop_size_mm: int,
         crop_image_size: int,
+        crop_intensity_mode: str,
         batch_size: int,
         num_workers: int,
     ) -> None:
@@ -41,6 +42,7 @@ class DetectionMILDataModule(pl.LightningDataModule):
         self.min_probability = min_probability
         self.crop_size_mm = crop_size_mm
         self.crop_image_size = crop_image_size
+        self.crop_intensity_mode = crop_intensity_mode
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.class_counts = None
@@ -56,6 +58,7 @@ class DetectionMILDataModule(pl.LightningDataModule):
             min_probability=self.min_probability,
             crop_size_mm=self.crop_size_mm,
             crop_image_size=self.crop_image_size,
+            crop_intensity_mode=self.crop_intensity_mode,
             classes=self.classes,
             prediction_name=self.prediction_name,
             train=train,

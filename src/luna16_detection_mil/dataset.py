@@ -195,6 +195,11 @@ def _window_to_uint8(image: np.ndarray, center: float = -600.0, width: float = 1
     return np.clip(image, 0, 255).astype(np.uint8)
 
 
+def _preprocessed_to_uint8(image: np.ndarray) -> np.ndarray:
+    image = np.nan_to_num(image.astype(np.float32), nan=0.0, posinf=255.0, neginf=0.0)
+    return np.clip(image, 0.0, 255.0).astype(np.uint8)
+
+
 def _crop_with_padding(slice_image: np.ndarray, center_y: float, center_x: float, crop_size: int) -> np.ndarray:
     half = crop_size // 2
     cy = int(round(center_y))
@@ -234,6 +239,7 @@ class DetectionMILDataset(Dataset):
         crop_image_size: int = 224,
         classes: Iterable[str] = ("benign", "malignant"),
         prediction_name: str = "test_predictions.csv",
+        crop_intensity_mode: str = "lung_window",
         train: bool = False,
     ) -> None:
         self.samples = _read_samples(
@@ -250,6 +256,12 @@ class DetectionMILDataset(Dataset):
         self.top_k = int(top_k)
         self.crop_size_mm = int(crop_size_mm)
         self.crop_image_size = int(crop_image_size)
+        if crop_intensity_mode not in ("lung_window", "preprocessed_uint8"):
+            raise ValueError(
+                "crop_intensity_mode must be one of: lung_window, preprocessed_uint8; "
+                f"got {crop_intensity_mode!r}"
+            )
+        self.crop_intensity_mode = crop_intensity_mode
         self.transform = build_crop_transform(crop_image_size, train=train)
         self.labels = [sample.label for sample in self.samples]
 
@@ -267,7 +279,11 @@ class DetectionMILDataset(Dataset):
         for candidate in candidates:
             z = int(np.clip(round(candidate.z), 0, volume.shape[0] - 1))
             crop = _crop_with_padding(volume[z], candidate.y, candidate.x, self.crop_size_mm)
-            pil = Image.fromarray(_window_to_uint8(crop), mode="L").convert("RGB")
+            if self.crop_intensity_mode == "lung_window":
+                crop_uint8 = _window_to_uint8(crop)
+            else:
+                crop_uint8 = _preprocessed_to_uint8(crop)
+            pil = Image.fromarray(crop_uint8, mode="L").convert("RGB")
             crops.append(self.transform(pil))
             candidate_probs.append(float(candidate.probability))
 
