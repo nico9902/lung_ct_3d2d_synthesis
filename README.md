@@ -62,7 +62,6 @@ python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r requirements_saliency.txt
 ```
 
 Some experiments require additional detector-specific dependencies under `src/det/` and GPU-enabled PyTorch. The exact environment may need to be adapted to the target CUDA version.
