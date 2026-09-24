@@ -13,7 +13,15 @@
     "crop_mil_attention_effnetv2s": "Detector crop-MIL attention, EfficientNetV2-S",
     "fixed_control_rbf_effnetv2s": "Fixed-control RBF, EfficientNetV2-S",
     "random_control_rbf_effnetv2s": "Random-control RBF, EfficientNetV2-S",
-    "resnet18_3d_fitpad": "3D ResNet18, fit-pad 224x288x288"
+    "resnet18_3d_fitpad": "3D ResNet18, fit-pad 224x288x288",
+    "colipri_pooled": "COLIPRI-CRM frozen linear probe, pooled embedding",
+    "colipri_dense_maxpool": "COLIPRI-CRM frozen linear probe, dense channel-max-pool embedding",
+    "radjepa_resize32": "Rad-JEPA-3D frozen linear probe, resize32 embedding",
+    "radjepa_sliding_mean": "Rad-JEPA-3D frozen linear probe, sliding-window mean embedding",
+    "radjepa_sliding_max": "Rad-JEPA-3D frozen linear probe, sliding-window max embedding",
+    "radjepa_sliding_mean_max": "Rad-JEPA-3D frozen linear probe, sliding-window mean+max embedding",
+    "dino3d_partial_ft": "3DINO-ViT partial fine-tuning, sliding-window mean+max",
+    "slice_attention_effnetb0_half_frozen": "Backbone with soft slice attention, EfficientNet-B0 half-frozen"
   },
   "comparisons": [
     [
@@ -47,6 +55,38 @@
     [
       "adaptive_rbf_effnetv2s",
       "resnet18_3d_fitpad"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "colipri_pooled"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "colipri_dense_maxpool"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "radjepa_resize32"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "radjepa_sliding_mean"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "radjepa_sliding_max"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "radjepa_sliding_mean_max"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "dino3d_partial_ft"
+    ],
+    [
+      "adaptive_rbf_effnetv2s",
+      "slice_attention_effnetb0_half_frozen"
     ]
   ]
 }

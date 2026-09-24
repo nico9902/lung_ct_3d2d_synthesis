@@ -22,6 +22,9 @@ myenv/
 .venv/
 env/
 
+# Vendored third-party code (cloned locally, not redistributed via this repo)
+external/
+
 # Datasets and generated data
 data/
 datasets/

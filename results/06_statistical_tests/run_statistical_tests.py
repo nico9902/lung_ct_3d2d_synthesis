@@ -12,6 +12,11 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, matthews
 
 ROOT = Path(__file__).resolve().parent
 REMOTE = ROOT / "predictions" / "remote" / "outputs"
+REPO_ROOT = ROOT.parents[1]
+COLIPRI_PROBES = REPO_ROOT / "outputs" / "luna16_colipri_3d" / "probes"
+RADJEPA_PROBES = REPO_ROOT / "outputs" / "luna16_radjepa_3d" / "probes"
+DINO3D_PREDICTIONS = REPO_ROOT / "outputs" / "luna16_3dino_3d_restart_20260918" / "all_test_predictions_3dino_partial_ft.csv"
+SLICE_ATTENTION_PREDICTIONS = REPO_ROOT / "outputs" / "luna16_slice_attention_2p5d_effnetb0_half_frozen_v100_bs2" / "all_test_predictions_efficientnet_b0.csv"
 N_BOOTSTRAP = 5000
 RANDOM_SEED = 20260819
 
@@ -71,6 +76,47 @@ METHODS = {
         "path": REMOTE / "luna16_volume_3d_resnet18_fitpad_224x288x288_b4_acc2_ep100_noes_wandb",
         "pattern": "fold_*/resnet18_3d/test_predictions.csv",
     },
+    "colipri_pooled": {
+        "label": "COLIPRI-CRM frozen linear probe, pooled embedding",
+        "kind": "all_test",
+        "path": COLIPRI_PROBES / "all_test_predictions_pooled.csv",
+    },
+    "colipri_dense_maxpool": {
+        "label": "COLIPRI-CRM frozen linear probe, dense channel-max-pool embedding",
+        "kind": "all_test",
+        "path": COLIPRI_PROBES / "all_test_predictions_dense_maxpool.csv",
+    },
+    "radjepa_resize32": {
+        "label": "Rad-JEPA-3D frozen linear probe, resize32 embedding",
+        "kind": "all_test",
+        "path": RADJEPA_PROBES / "all_test_predictions_resize32.csv",
+    },
+    "radjepa_sliding_mean": {
+        "label": "Rad-JEPA-3D frozen linear probe, sliding-window mean embedding",
+        "kind": "all_test",
+        "path": RADJEPA_PROBES / "all_test_predictions_sliding_mean.csv",
+    },
+    "radjepa_sliding_max": {
+        "label": "Rad-JEPA-3D frozen linear probe, sliding-window max embedding",
+        "kind": "all_test",
+        "path": RADJEPA_PROBES / "all_test_predictions_sliding_max.csv",
+    },
+    "radjepa_sliding_mean_max": {
+        "label": "Rad-JEPA-3D frozen linear probe, sliding-window mean+max embedding",
+        "kind": "all_test",
+        "path": RADJEPA_PROBES / "all_test_predictions_sliding_mean_max.csv",
+    },
+    "dino3d_partial_ft": {
+        "label": "3DINO-ViT partial fine-tuning, sliding-window mean+max",
+        "kind": "all_test",
+        "path": DINO3D_PREDICTIONS,
+    },
+    "slice_attention_effnetb0_half_frozen": {
+        "label": "Backbone with soft slice attention, EfficientNet-B0 half-frozen (batch size 8)",
+        "kind": "all_test",
+        "path": SLICE_ATTENTION_PREDICTIONS,
+        "backbone": "efficientnet_b0",
+    },
 }
 
 
@@ -83,6 +129,14 @@ COMPARISONS = [
     ("adaptive_rbf_effnetv2s", "fixed_control_rbf_effnetv2s"),
     ("adaptive_rbf_effnetv2s", "random_control_rbf_effnetv2s"),
     ("adaptive_rbf_effnetv2s", "resnet18_3d_fitpad"),
+    ("adaptive_rbf_effnetv2s", "colipri_pooled"),
+    ("adaptive_rbf_effnetv2s", "colipri_dense_maxpool"),
+    ("adaptive_rbf_effnetv2s", "radjepa_resize32"),
+    ("adaptive_rbf_effnetv2s", "radjepa_sliding_mean"),
+    ("adaptive_rbf_effnetv2s", "radjepa_sliding_max"),
+    ("adaptive_rbf_effnetv2s", "radjepa_sliding_mean_max"),
+    ("adaptive_rbf_effnetv2s", "dino3d_partial_ft"),
+    ("adaptive_rbf_effnetv2s", "slice_attention_effnetb0_half_frozen"),
 ]
 
 
