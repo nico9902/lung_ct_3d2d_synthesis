@@ -59,16 +59,18 @@ python3 -m src.luna16_synthetic_2d.train \
   --backbone resnet50
 ```
 
-Run the default backbone set:
+Run the default backbone set on one synthetic image set (see `bash/README.md`
+for the per-experiment wrappers):
 
 ```bash
-src/luna16_synthetic_2d/run_backbones.sh
+EXPERIMENT_NAME=cpmnetv2_bf16_top4_minprob0.50_rbf bash bash/luna16_synthetic_2d/train_backbones.sh
 ```
 
 Run a subset:
 
 ```bash
-FOLDS="0 1" BACKBONES="resnet18 densenet121" src/luna16_synthetic_2d/run_backbones.sh
+EXPERIMENT_NAME=cpmnetv2_bf16_top4_minprob0.50_rbf FOLDS="0 1" BACKBONES="resnet18 densenet121" \
+  bash bash/luna16_synthetic_2d/train_backbones.sh
 ```
 
 The launcher also accepts `FREEZE_BACKBONE=1`, `FREEZE_HALF_BACKBONE=1`,

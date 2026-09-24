@@ -1,25 +1,16 @@
 #!/usr/bin/env bash
+# Non-adaptive 2.5D baseline: soft attention over all axial slices of the volume.
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${PROJECT_DIR:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
-VENV_PATH="${VENV_PATH:-${PROJECT_DIR}/myenv}"
-
-cd "${PROJECT_DIR}"
-source "${VENV_PATH}/bin/activate"
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export PYTHONPATH="${PROJECT_DIR}:${PYTHONPATH:-}"
 
-DATA_ROOT="${DATA_ROOT:-/ssd2/domenico/datasets/LUNA16_preprocessed}"
-SPLITS_DIR="${SPLITS_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cv_splits}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/luna16_slice_attention_2p5d_all_slices_256x384_effnetv2s}"
 RESULTS_DIR="${RESULTS_DIR:-results/03_2d_nonadaptive_baselines}"
-CACHE_DIR="${CACHE_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cache_slice_attention_256x384}"
+CACHE_DIR="${CACHE_DIR:-${DATA_ROOT}/cache_slice_attention_256x384}"
 
 IMAGE_HEIGHT="${IMAGE_HEIGHT:-256}"
 IMAGE_WIDTH="${IMAGE_WIDTH:-384}"
-FOLDS="${FOLDS:-0 1 2 3 4 5 6 7 8 9}"
 BACKBONE="${BACKBONE:-efficientnet_v2_s}"
 EPOCHS="${EPOCHS:-100}"
 BATCH_SIZE="${BATCH_SIZE:-8}"

@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
+# Foundation-model baseline: 3DINO-ViT, final 12 blocks fine-tuned, mean+max
+# pooling over overlapping 112^3 windows. Requires the official teacher checkpoint.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
-cd /home/domenico/lung_ct_3d2d_synthesis
-source myenv/bin/activate
-
-# 3DINO-ViT baseline: use the A100 (physical GPU index 3 on this host, per
-# `nvidia-smi`'s PCI-bus-ID ordering) as the sole visible device, so it
-# appears as cuda:0 ("DEVICE 0"). CUDA_DEVICE_ORDER=PCI_BUS_ID is required:
-# PyTorch's default CUDA enumeration does NOT match nvidia-smi's indices on
-# this host (index 3 without it silently resolves to a V100).
-export CUDA_DEVICE_ORDER="PCI_BUS_ID"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"
-export PYTHONPATH="/home/domenico/lung_ct_3d2d_synthesis:${PYTHONPATH:-}"
+# PCI_BUS_ID makes CUDA_VISIBLE_DEVICES follow the nvidia-smi GPU indices.
+export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export XFORMERS_DISABLED=1
 
-DATA_ROOT="${DATA_ROOT:-data/processed}"
-SPLITS_DIR="${SPLITS_DIR:-data/processed/cv_splits}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/luna16_3dino_3d}"
 WINDOWS_CACHE_DIR="${WINDOWS_CACHE_DIR:-${OUTPUT_ROOT}/window_cache}"
 RESULTS_DIR="${RESULTS_DIR:-results/10_3dino_foundation_baseline}"
@@ -39,7 +32,6 @@ SEED="${SEED:-233}"
 WANDB_PROJECT="${WANDB_PROJECT:-luna16-3dino-3d}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"
 WANDB_OFFLINE="${WANDB_OFFLINE:-0}"
-FOLDS="${FOLDS:-0 1 2 3 4 5 6 7 8 9}"
 
 mkdir -p logs/luna16_3dino_3d "${OUTPUT_ROOT}" "${WINDOWS_CACHE_DIR}" "${RESULTS_DIR}"
 LOG_FILE="logs/luna16_3dino_3d/$(date +%Y%m%d_%H%M%S)_3dino_baseline.log"
@@ -63,7 +55,7 @@ fi
 
   for FOLD in ${FOLDS}; do
     echo "===== fold ${FOLD} ====="
-    python src/luna16_3dino_3d/train.py \
+    python -m src.luna16_3dino_3d.train \
       --data-root "${DATA_ROOT}" \
       --splits-dir "${SPLITS_DIR}" \
       --output-dir "${OUTPUT_ROOT}" \
@@ -89,7 +81,7 @@ fi
   done
 
   echo "===== Aggregating pooled + per-fold mean/std metrics ====="
-  python src/luna16_3dino_3d/aggregate.py \
+  python -m src.luna16_3dino_3d.aggregate \
     --output-dir "${OUTPUT_ROOT}" \
     --report-name "dino3d_pooled_results.md"
 

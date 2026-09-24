@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
+# Foundation-model baseline: frozen Rad-JEPA-3D embeddings + linear probes
+# (resize-32 and sliding-window mean / max / mean+max representations).
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
-cd /home/domenico/lung_ct_3d2d_synthesis
+# PCI_BUS_ID makes CUDA_VISIBLE_DEVICES follow the nvidia-smi GPU indices.
+export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-# Rad-JEPA-3D baseline: use the A100 (physical GPU index 3 on this host, per
-# `nvidia-smi`'s PCI-bus-ID ordering) as the sole visible device, so it
-# appears as cuda:0 ("DEVICE 0"). CUDA_DEVICE_ORDER=PCI_BUS_ID is required:
-# PyTorch's default CUDA enumeration does NOT match nvidia-smi's indices on
-# this host (index 3 without it silently resolves to a V100).
-export CUDA_DEVICE_ORDER="PCI_BUS_ID"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"
+# Feature extraction needs mamba-ssm/causal-conv1d on torch==2.5.1+cu121, which
+# is incompatible with this repository's environment. It therefore runs with a
+# separate interpreter (RADJEPA_PYTHON); the probes use the main environment.
+RADJEPA_PYTHON="${RADJEPA_PYTHON:?Set RADJEPA_PYTHON to the python of the Rad-JEPA-3D environment}"
+RADJEPA_CODE_DIR="${RADJEPA_CODE_DIR:-external/RadJepa}"
+RADJEPA_HF_MODEL_DIR="${RADJEPA_HF_MODEL_DIR:-external/Rad-Jepa-3D-hf}"
 
-# Feature extraction needs mamba-ssm/causal-conv1d on torch==2.5.1+cu121,
-# incompatible with this repo's myenv (torch==2.10.0). It runs with the
-# sibling lung-jepa-world-model project's own working environment instead,
-# by absolute path -- this repo's myenv is never modified for this baseline.
-RADJEPA_PYTHON="${RADJEPA_PYTHON:-/home/domenico/lung-jepa-world-model/.venv/bin/python3}"
-RADJEPA_CODE_DIR="${RADJEPA_CODE_DIR:-/home/domenico/lung-jepa-world-model/external/RadJepa}"
-RADJEPA_HF_MODEL_DIR="${RADJEPA_HF_MODEL_DIR:-/home/domenico/lung-jepa-world-model/external/Rad-Jepa-3D-hf}"
-
-SPLITS_DIR="${SPLITS_DIR:-data/processed/cv_splits}"
 RAW_ROOT="${RAW_ROOT:-data/raw/LUNA16/subsets}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/luna16_radjepa_3d}"
 EMBEDDINGS_DIR="${EMBEDDINGS_DIR:-${OUTPUT_ROOT}/embeddings}"
@@ -54,12 +49,10 @@ LOG_FILE="logs/luna16_radjepa_3d/$(date +%Y%m%d_%H%M%S)_radjepa_baseline.log"
     --device cuda
 
   echo "===== Step 2/3: training frozen linear probes for 10 folds x 4 representations ====="
-  source myenv/bin/activate
-  export PYTHONPATH="/home/domenico/lung_ct_3d2d_synthesis:${PYTHONPATH:-}"
   for REPRESENTATION in "${REPRESENTATIONS[@]}"; do
-    for FOLD in 0 1 2 3 4 5 6 7 8 9; do
+    for FOLD in ${FOLDS}; do
       echo "--- representation=${REPRESENTATION} fold=${FOLD} ---"
-      python src/luna16_radjepa_3d/train_linear_probe.py \
+      python -m src.luna16_radjepa_3d.train_linear_probe \
         --embeddings-dir "${EMBEDDINGS_DIR}/per_patient" \
         --splits-dir "${SPLITS_DIR}" \
         --output-dir "${PROBES_DIR}" \
@@ -76,7 +69,7 @@ LOG_FILE="logs/luna16_radjepa_3d/$(date +%Y%m%d_%H%M%S)_radjepa_baseline.log"
   done
 
   echo "===== Step 3/3: aggregating pooled + per-fold mean/std metrics ====="
-  python src/luna16_radjepa_3d/aggregate.py \
+  python -m src.luna16_radjepa_3d.aggregate \
     --output-dir "${PROBES_DIR}" \
     --representations "${REPRESENTATIONS[@]}" \
     --report-name "radjepa_pooled_results.md"

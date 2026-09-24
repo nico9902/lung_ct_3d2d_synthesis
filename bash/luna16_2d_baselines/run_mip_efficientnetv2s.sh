@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
+# Non-adaptive 2D baselines: build MIP / central-slice images (MODES) and
+# train EfficientNetV2-S on them with the shared 2D training launcher.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
-cd /home/domenico/lung_ct_3d2d_synthesis
-source myenv/bin/activate
-
-export PYTHONPATH="/home/domenico/lung_ct_3d2d_synthesis:${PYTHONPATH:-}"
-
-DATA_ROOT="${DATA_ROOT:-/ssd2/domenico/datasets/LUNA16_preprocessed}"
-SPLITS_DIR="${SPLITS_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cv_splits}"
-BASELINE_ROOT="${BASELINE_ROOT:-/ssd2/domenico/datasets/2d_baselines}"
+BASELINE_ROOT="${BASELINE_ROOT:-data/2d_baselines}"
 IMAGE_HEIGHT="${IMAGE_HEIGHT:-256}"
 IMAGE_WIDTH="${IMAGE_WIDTH:-384}"
-FOLDS="${FOLDS:-0 1 2 3 4 5 6 7 8 9}"
 DEVICES="${DEVICES:-[0]}"
 PRECISION="${PRECISION:-32}"
 EPOCHS="${EPOCHS:-100}"
@@ -35,7 +30,7 @@ for MODE in ${MODES}; do
 
   DATASET_DIR="${BASELINE_ROOT}/luna16_${BASELINE_KIND}_${MODE}_${IMAGE_HEIGHT}x${IMAGE_WIDTH}"
   echo "Generating non-adaptive dataset: ${MODE} -> ${DATASET_DIR}"
-  python3 -m src.luna16_synthetic_2d.generate_mip_baselines \
+  python -m src.luna16_synthetic_2d.generate_mip_baselines \
     --data-root "${DATA_ROOT}" \
     --split-csv "${SPLITS_DIR}/luna16_classification_fold0.csv" \
     --output-dir "${DATASET_DIR}" \
@@ -67,7 +62,7 @@ for MODE in ${MODES}; do
   ACCUMULATE_GRAD_BATCHES=1 \
   MONITOR="val_mcc" \
   EXPORT_BACKBONE_SUMMARY="${EXPORT_BACKBONE_SUMMARY}" \
-  bash src/luna16_synthetic_2d/run_backbones_det_experiment.sh \
+  bash "${PROJECT_DIR}/bash/luna16_synthetic_2d/train_backbones.sh" \
     --lr "${LR}" \
     --weight-decay "${WEIGHT_DECAY}" \
     --num-workers "${NUM_WORKERS}" \

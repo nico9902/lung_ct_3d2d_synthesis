@@ -111,6 +111,9 @@ bash/run_luna16_detector_saliency_top7*
 bash/run_luna16_detector_saliency_top3_top4_minprob0.5_all.sh
 bash/run_luna16_saliency.sh
 bash/synthetic_gen.sh
+bash/dicom_to_nifti.sh
+# Launchers live in bash/ only; keep stray local scripts out of src/.
+src/**/*.sh
 src/cls/
 src/det/GravitySpace/
 src/det/SCPMNet/
@@ -151,11 +154,5 @@ src/luna16_synthetic_2d/create_detection_slice_mosaics.py
 src/luna16_synthetic_2d/export_class_rankings.py
 src/luna16_synthetic_2d/export_gradcam.py
 src/luna16_synthetic_2d/export_gt_synthetic_samples.py
-src/luna16_synthetic_2d/build_nodule_position_distribution.py
 src/luna16_synthetic_2d/compare_synthetic_surface_quality.py
 src/luna16_synthetic_2d/README_saliency.md
-src/luna16_synthetic_2d/run_gradcam_*.sh
-src/luna16_synthetic_2d/run_backbones_det_top3*
-src/luna16_synthetic_2d/run_backbones_det_top7*
-src/luna16_synthetic_2d/run_luna16_detector_normauto_a100.sh
-src/luna16_synthetic_2d/run_luna16_fpr_top100.sh

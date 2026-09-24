@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
+# Volumetric baseline: 3D ResNet18 on the whole preprocessed CT volume.
 set -euo pipefail
-
-cd /home/domenico/lung_ct_3d2d_synthesis
-source myenv/bin/activate
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export PYTHONPATH="/home/domenico/lung_ct_3d2d_synthesis:${PYTHONPATH:-}"
 
-DATA_ROOT="${DATA_ROOT:-/ssd2/domenico/datasets/LUNA16_preprocessed}"
-SPLITS_DIR="${SPLITS_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cv_splits}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/luna16_volume_3d_resnet18}"
 RESULTS_DIR="${RESULTS_DIR:-results}"
 VOLUME_D="${VOLUME_D:-160}"
@@ -16,9 +12,9 @@ VOLUME_H="${VOLUME_H:-224}"
 VOLUME_W="${VOLUME_W:-224}"
 NO_RESIZE="${NO_RESIZE:-0}"
 if [[ "${NO_RESIZE}" == "1" ]]; then
-  CACHE_DIR="${CACHE_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cache_resnet18_native}"
+  CACHE_DIR="${CACHE_DIR:-${DATA_ROOT}/cache_resnet18_native}"
 else
-  CACHE_DIR="${CACHE_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cache_resnet18_${VOLUME_D}x${VOLUME_H}x${VOLUME_W}}"
+  CACHE_DIR="${CACHE_DIR:-${DATA_ROOT}/cache_resnet18_${VOLUME_D}x${VOLUME_H}x${VOLUME_W}}"
 fi
 
 EPOCHS="${EPOCHS:-100}"
@@ -51,13 +47,13 @@ if [[ "${WANDB_OFFLINE}" == "1" ]]; then
   WANDB_ARGS+=(--wandb-offline)
 fi
 
-for FOLD in 0 1 2 3 4 5 6 7 8 9; do
+for FOLD in ${FOLDS}; do
   echo "===== fold ${FOLD} ====="
   SIZE_ARGS=(--volume-size "${VOLUME_D}" "${VOLUME_H}" "${VOLUME_W}")
   if [[ "${NO_RESIZE}" == "1" ]]; then
     SIZE_ARGS+=(--no-resize)
   fi
-  python src/luna16_volume_3d/train_resnet18.py \
+  python -m src.luna16_volume_3d.train_resnet18 \
     --data-root "${DATA_ROOT}" \
     --splits-dir "${SPLITS_DIR}" \
     --output-dir "${OUTPUT_DIR}" \
@@ -77,7 +73,7 @@ for FOLD in 0 1 2 3 4 5 6 7 8 9; do
     "${WANDB_ARGS[@]}"
 done 2>&1 | tee "${LOG_FILE}"
 
-python src/luna16_volume_3d/aggregate_resnet18.py \
+python -m src.luna16_volume_3d.aggregate_resnet18 \
   --output-dir "${OUTPUT_DIR}" \
   --results-dir "${RESULTS_DIR}" \
   --name "luna16_volume_3d_resnet18_pooled_results"

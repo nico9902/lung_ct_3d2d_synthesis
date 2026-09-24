@@ -1,27 +1,13 @@
 #!/usr/bin/env bash
-
+# Export Grad-CAM explanations of the proposed method (adaptive RBF, top-4,
+# p >= 0.5, EfficientNetV2-S) for the test split of every fold.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="${PROJECT_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-cd "${PROJECT_DIR}"
-
-VENV_PATH="${VENV_PATH:-myenv}"
-if [ -f "${VENV_PATH}/bin/activate" ]; then
-  source "${VENV_PATH}/bin/activate"
-elif [ -f "venv/bin/activate" ]; then
-  source venv/bin/activate
-elif [ -f ".venv/bin/activate" ]; then
-  source .venv/bin/activate
-fi
-
-EXPERIMENT_NAME="${EXPERIMENT_NAME:-luna16_synthetic_2d_top4_minprob0.5_rbf}"
+EXPERIMENT_NAME="${EXPERIMENT_NAME:-luna16_synthetic_2d_cpmnetv2_bf16_top4_minprob0.50_rbf_v100}"
 BACKBONE="${BACKBONE:-efficientnet_v2_s}"
-FOLDS="${FOLDS:-0 1 2 3 4 5 6 7 8 9}"
-SPLITS_DIR="${SPLITS_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cv_splits}"
-PROCESSED_DIR="${PROCESSED_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed}"
 SPLIT_NAME="${SPLIT_NAME:-test}"
-SYNTHETIC_IMAGES_DIR="${SYNTHETIC_IMAGES_DIR:-/ssd2/domenico/datasets/synthetic_2d/luna16_saliency_synthetic_detector_top4_minprob0.5_rbf}"
+SYNTHETIC_IMAGES_DIR="${SYNTHETIC_IMAGES_DIR:-${SYNTHETIC_ROOT}/luna16_saliency_synthetic_detector_cpmnetv2_bf16_top4_minprob0.50_rbf}"
 RUN_ROOT="${RUN_ROOT:-outputs/${EXPERIMENT_NAME}}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/luna16_synthetic_2d_gradcam/${EXPERIMENT_NAME}_${BACKBONE}}"
 CHECKPOINT_GLOB="${CHECKPOINT_GLOB:-*.ckpt}"
@@ -43,7 +29,7 @@ echo "  Experiment: ${EXPERIMENT_NAME}"
 echo "  Backbone: ${BACKBONE}"
 echo "  Folds: ${FOLDS}"
 echo "  Synthetic images: ${SYNTHETIC_IMAGES_DIR}"
-echo "  Processed data: ${PROCESSED_DIR}"
+echo "  Processed data: ${DATA_ROOT}"
 echo "  Excluded samples: ${EXCLUDE_SAMPLE_IDS}"
 echo "  Output root: ${OUTPUT_ROOT}"
 echo "  Device: ${DEVICE}"
@@ -72,7 +58,7 @@ for FOLD in ${FOLDS}; do
   CHECKPOINT="${FILTERED_CHECKPOINTS[0]}"
   echo "Fold ${FOLD}: ${CHECKPOINT}"
 
-  python3 -m src.luna16_synthetic_2d.explain_gradcam \
+  python -m src.luna16_synthetic_2d.explain_gradcam \
     --checkpoint "${CHECKPOINT}" \
     --run-dir "${RUN_DIR}" \
     --synthetic-images-dir "${SYNTHETIC_IMAGES_DIR}" \
@@ -80,7 +66,7 @@ for FOLD in ${FOLDS}; do
     --fold "${FOLD}" \
     --split "${SPLIT_NAME}" \
     --backbone "${BACKBONE}" \
-    --processed-dir "${PROCESSED_DIR}" \
+    --processed-dir "${DATA_ROOT}" \
     --gt-overlay auto \
     --clip-gt-to-lung \
     --image-size ${IMAGE_SIZE} \

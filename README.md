@@ -44,7 +44,7 @@ Adaptive RBF was the strongest evaluated configuration. Paired DeLong and exact 
 ## Repository layout
 
 ```text
-bash/                         Experiment launch scripts
+bash/                         Experiment launchers, one folder per src/ package (see bash/README.md)
 assets/                       Figures displayed in this README
 src/det/CPMNetv2/             3D nodule detector
 src/luna16_synthetic_2d/      Adaptive synthesis and 2D classifiers
@@ -76,17 +76,31 @@ Raw and preprocessed medical images are not distributed with the repository. The
 Typical local paths are:
 
 ```text
-data/raw/LUNA16/
-data/LUNA16_preprocessed/
-data/processed/cv_splits/
-outputs/
+data/raw/LUNA16/              raw LUNA16 subsets and annotations
+data/processed/               preprocessed volumes and masks (DATA_ROOT)
+data/processed/cv_splits/     patient-level fold CSVs (SPLITS_DIR)
+data/synthetic_2d/            generated synthetic 2D images (SYNTHETIC_ROOT)
+data/2d_baselines/            MIP / central-slice baseline images
+outputs/                      checkpoints, predictions and metrics
 ```
+
+Each entry can be a symlink to a larger disk; the launchers read these locations through the environment variables shown.
 
 ## Main experiments
 
-The principal detector-guided experiment uses CPMNetv2 candidates with probability threshold `0.50` and `top-k = 4`, followed by RBF synthesis and EfficientNetV2-S classification.
+The principal detector-guided experiment uses CPMNetv2 candidates with probability threshold `0.50` and `top-k = 4`, followed by RBF synthesis and EfficientNetV2-S classification. It runs end to end with:
 
-Grad-CAM explanations can be generated with:
+```bash
+bash bash/preprocessing/luna16_preprocessing.sh
+bash bash/preprocessing/reorganize_luna16_subsets.sh
+bash bash/cpmnetv2/train_10fold.sh
+bash bash/luna16_synthetic_2d/generate_top4_minprob0.5_rbf.sh
+bash bash/luna16_synthetic_2d/train_top4_minprob0.5_rbf.sh
+```
+
+Every baseline in the results table has its own launcher; [`bash/README.md`](bash/README.md) maps scripts to experiments and lists the environment variables used to point them at local data and GPUs.
+
+Grad-CAM explanations can be generated with `bash bash/luna16_synthetic_2d/gradcam_top4_minprob0.5_rbf.sh`, or directly with:
 
 ```bash
 python -m src.luna16_synthetic_2d.explain_gradcam \

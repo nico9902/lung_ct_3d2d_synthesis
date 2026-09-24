@@ -16,7 +16,8 @@ The most relevant files are:
 | `dataload/dataset_lidc.py` | LIDC NIfTI loading, view conversion, label conversion, crops, and split-combine inference dataset. |
 | `evaluationScript/detectionCADEvalutionIOU.py` | IOU-based CAD/FROC evaluation. |
 | `conf/train_lightning.yaml` | Default Hydra configuration. |
-| `bash/cpmnetv2_train_lightning_hydra.sh` | Example shell launcher with practical training defaults. |
+| `bash/cpmnetv2/train_fold.sh` | Shell launcher for one LUNA16 split (validation-FROC checkpointing). |
+| `bash/cpmnetv2/train_10fold.sh` | 10-fold LUNA16 training used in the paper. |
 
 ## Model Overview
 
@@ -525,10 +526,11 @@ The Hydra entrypoint is:
 python -m src.det.CPMNetv2.train_lightning
 ```
 
-The convenience launcher is:
+The convenience launchers are:
 
 ```bash
-bash bash/cpmnetv2_train_lightning_hydra.sh
+bash bash/cpmnetv2/train_fold.sh      # one split; extra args are Hydra overrides
+bash bash/cpmnetv2/train_10fold.sh    # all 10 LUNA16 folds (paper detector)
 ```
 
 Common overrides:

@@ -1,16 +1,9 @@
 #!/usr/bin/env bash
+# Detector-crop MIL baseline using the uint8 preprocessed intensities for the crops.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 
-cd /home/domenico/lung_ct_3d2d_synthesis
-source myenv/bin/activate
-
-export PYTHONPATH="/home/domenico/lung_ct_3d2d_synthesis:${PYTHONPATH:-}"
-
-DATA_ROOT="${DATA_ROOT:-/ssd2/domenico/datasets/LUNA16_preprocessed}"
-SPLITS_DIR="${SPLITS_DIR:-/ssd2/domenico/datasets/LUNA16_preprocessed/cv_splits}"
-PREDICTIONS_ROOT="${PREDICTIONS_ROOT:-outputs/cpmnetv2_luna16_10fold_bf16_guarded_results/normalized_predictions}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/luna16_detection_mil_cpmnetv2_top4_minprob0.50_effnetv2s_preprocessed_uint8}"
-FOLDS="${FOLDS:-0 1 2 3 4 5 6 7 8 9}"
 POOLINGS="${POOLINGS:-mean max attention}"
 TOP_K="${TOP_K:-4}"
 MIN_PROBABILITY="${MIN_PROBABILITY:-0.5}"
@@ -41,7 +34,7 @@ fi
 
 echo "Training fixed detection-crop MIL baseline"
 echo "  Output: ${OUTPUT_DIR}"
-echo "  Predictions: ${PREDICTIONS_ROOT}"
+echo "  Predictions: ${DETECTOR_PREDICTIONS}"
 echo "  Crop intensity mode: ${CROP_INTENSITY_MODE}"
 echo "  Top-k/min-probability: ${TOP_K}/${MIN_PROBABILITY}"
 echo "  Poolings: ${POOLINGS}"
@@ -49,11 +42,11 @@ echo "  Folds: ${FOLDS}"
 
 for POOLING in ${POOLINGS}; do
   for FOLD in ${FOLDS}; do
-    python3 -m src.luna16_detection_mil.train \
+    python -m src.luna16_detection_mil.train \
       --output-dir "${OUTPUT_DIR}" \
       --data-root "${DATA_ROOT}" \
       --splits-dir "${SPLITS_DIR}" \
-      --predictions-root "${PREDICTIONS_ROOT}" \
+      --predictions-root "${DETECTOR_PREDICTIONS}" \
       --fold "${FOLD}" \
       --backbone efficientnet_v2_s \
       --pooling "${POOLING}" \
@@ -76,6 +69,6 @@ for POOLING in ${POOLINGS}; do
   done
 done
 
-python3 -m src.luna16_detection_mil.aggregate \
+python -m src.luna16_detection_mil.aggregate \
   --output-dir "${OUTPUT_DIR}" \
   --poolings ${POOLINGS}
