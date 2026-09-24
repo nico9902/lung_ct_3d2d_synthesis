@@ -11,10 +11,8 @@ Loads the cached per-window RadJEPA-3D embeddings produced by
 
 A single ``Linear(feature_dim, 1)`` head (BCEWithLogitsLoss) is trained on
 top, using the *exact* same fold CSV (``luna16_classification_fold{fold}.csv``)
-already used by the Adaptive RBF experiments. Reuses the generic
-training/evaluation utilities (metrics, early stopping, output-file
-conventions) from the COLIPRI baseline's probe script, since none of that
-logic is representation-specific.
+already used by the Adaptive RBF experiments. It reuses representation-agnostic
+training and evaluation utilities shared by the volumetric baselines.
 """
 
 from __future__ import annotations
@@ -36,7 +34,7 @@ from torch.utils.data import DataLoader, Dataset
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.luna16_colipri_3d.train_linear_probe import (  # noqa: E402
+from src.luna16_foundation_common import (  # noqa: E402
     build_model,
     compute_metrics,
     evaluate,

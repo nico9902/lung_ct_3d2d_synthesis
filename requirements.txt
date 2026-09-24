@@ -16,7 +16,3 @@ torch==2.10.0
 torchvision==0.25.0
 wandb==0.24.0
 
-# COLIPRI foundation-model baseline (src/luna16_colipri_3d/); timm above is
-# pinned to satisfy colipri's `timm<1.0.23` constraint.
-colipri==0.1.3
-torchio==1.2.1

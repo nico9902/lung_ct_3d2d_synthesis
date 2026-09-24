@@ -1,9 +1,7 @@
 """Aggregate partial-fine-tuning 3DINO-ViT results across all 10 LUNA16 folds.
 
-Reuses the generic pooled/per-fold metric computation from the COLIPRI
-baseline's aggregator (representation-agnostic); there is a single
-representation here (mean+max window pooling), unlike COLIPRI/Rad-JEPA's
-multi-representation sweep.
+Uses the shared representation-agnostic pooled/per-fold metric utilities.
+There is a single representation here (mean+max window pooling).
 """
 
 from __future__ import annotations
@@ -19,7 +17,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.luna16_colipri_3d.aggregate import (  # noqa: E402
+from src.luna16_foundation_common import (  # noqa: E402
     PER_FOLD_METRIC_KEYS,
     per_fold_summary,
     pooled_metric_row,
@@ -63,7 +61,7 @@ def main() -> None:
         "",
         "3DINO-ViT (ViT-Large-3D, official AICONSlab checkpoint) with the first 12 of 24 transformer blocks "
         "frozen and the second 12 blocks + final norm fine-tuned, evaluated on the exact same 10 LUNA16 "
-        "patient-level malignancy folds used by the Adaptive RBF, COLIPRI, and Rad-JEPA-3D experiments. "
+        "patient-level malignancy folds used by the Adaptive RBF and Rad-JEPA-3D experiments. "
         "No lesion-guided information (detections, nodule coordinates, masks) is used -- only overlapping "
         "112^3 sliding windows over the full CT volume, aggregated via mean+max pooling.",
         "",

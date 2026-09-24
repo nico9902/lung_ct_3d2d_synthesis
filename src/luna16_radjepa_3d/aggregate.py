@@ -1,8 +1,7 @@
 """Aggregate frozen-RadJEPA-3D linear-probe results across all 10 LUNA16 folds.
 
-Reuses the generic pooled/per-fold metric computation from the COLIPRI
-baseline's aggregator (representation-agnostic) and only customizes the
-report text and the four RadJEPA representations.
+Uses the shared representation-agnostic pooled/per-fold metric utilities and
+customizes the report text for the four RadJEPA representations.
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.luna16_colipri_3d.aggregate import (  # noqa: E402
+from src.luna16_foundation_common import (  # noqa: E402
     PER_FOLD_METRIC_KEYS,
     per_fold_summary,
     pooled_metric_row,

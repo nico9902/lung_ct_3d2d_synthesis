@@ -24,8 +24,7 @@ mean-pooled token embedding (``encoder(x, indices=None).mean(dim=1)`` ->
     windows with stride 16 (plus a final window flush with the last slice so
     the tail is never dropped when depth isn't stride-aligned).
 
-Patient identity/labels are shared across all 10 Adaptive-RBF folds (same
-invariant already verified for the COLIPRI baseline), so embeddings are
+Patient identity/labels are shared across all 10 Adaptive-RBF folds, so embeddings are
 extracted once for the full patient set and cached to disk; the patient-level
 pooling strategies (resize32 / sliding-mean / sliding-max / sliding-mean+max)
 are all derived later, from this cache, without re-running the encoder.
@@ -49,7 +48,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.luna16_colipri_3d.extract_features import find_raw_ct_path, load_patient_table  # noqa: E402
+from src.luna16_foundation_common import find_raw_ct_path, load_patient_table  # noqa: E402
 
 DEFAULT_RADJEPA_CODE_DIR = Path("/home/domenico/lung-jepa-world-model/external/RadJepa")
 DEFAULT_HF_MODEL_DIR = Path("/home/domenico/lung-jepa-world-model/external/Rad-Jepa-3D-hf")
