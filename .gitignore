@@ -64,6 +64,7 @@ events.out.tfevents.*
 
 # Paper drafts and LaTeX build artifacts are kept local.
 latex/
+manuscript/
 *.aux
 *.bbl
 *.bcf
