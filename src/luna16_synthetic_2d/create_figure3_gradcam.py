@@ -19,15 +19,18 @@ from PIL import Image
 from scipy import ndimage as ndi
 
 
+# Correctly classified test cases of the paper model, one per fold, ranked by
+# true-class score. Benign: annotated nodules all rated <= 3. Malignant: at
+# least one nodule rated > 3 and a Grad-CAM hit on an annotated nodule.
 BENIGN_CASES = [
-    "1.3.6.1.4.1.14519.5.2.1.6279.6001.832260670372728970918746541371",
-    "1.3.6.1.4.1.14519.5.2.1.6279.6001.277445975068759205899107114231",
+    "1.3.6.1.4.1.14519.5.2.1.6279.6001.268992195564407418480563388746",
     "1.3.6.1.4.1.14519.5.2.1.6279.6001.323302986710576400812869264321",
+    "1.3.6.1.4.1.14519.5.2.1.6279.6001.970264865033574190975654369557",
 ]
 MALIGNANT_CASES = [
-    "1.3.6.1.4.1.14519.5.2.1.6279.6001.334517907433161353885866806005",
-    "1.3.6.1.4.1.14519.5.2.1.6279.6001.511347030803753100045216493273",
-    "1.3.6.1.4.1.14519.5.2.1.6279.6001.534006575256943390479252771547",
+    "1.3.6.1.4.1.14519.5.2.1.6279.6001.290135156874098366424871975734",
+    "1.3.6.1.4.1.14519.5.2.1.6279.6001.126631670596873065041988320084",
+    "1.3.6.1.4.1.14519.5.2.1.6279.6001.124663713663969377020085460568",
 ]
 
 GREEN = "#00B050"
@@ -41,8 +44,9 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path(
             "outputs/luna16_synthetic_2d_gradcam/"
-            "luna16_synthetic_2d_top4_minprob0.5_rbf_efficientnet_v2_s/fold_0"
+            "luna16_synthetic_2d_cpmnetv2_bf16_top4_minprob0.50_rbf_v100_efficientnet_v2_s"
         ),
+        help="Grad-CAM export root containing fold_<k>/images and fold_<k>/overlays.",
     )
     parser.add_argument(
         "--metadata-csv",
@@ -50,14 +54,15 @@ def parse_args() -> argparse.Namespace:
         default=Path("data/processed/cv_splits/luna16_classification_fold0.csv"),
     )
     parser.add_argument(
-        "--predictions-csv",
+        "--run-dir",
         type=Path,
-        default=Path("docs/luna16_synthetic_2d_gradcam_all_predicted/gradcam_manifest.csv"),
+        default=Path("outputs/luna16_synthetic_2d_cpmnetv2_bf16_top4_minprob0.50_rbf_v100"),
+        help="Training run whose fold_<k>/efficientnet_v2_s/test_predictions.csv give P(malignant).",
     )
     parser.add_argument(
         "--processed-root",
         type=Path,
-        default=Path("/ssd2/domenico/datasets/LUNA16_preprocessed"),
+        default=Path("data/processed"),
     )
     parser.add_argument(
         "--output",
@@ -87,7 +92,7 @@ def resize_mask(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
 
 
 def locate_asset(folder: Path, sample_id: str, suffix: str) -> Path:
-    matches = sorted(folder.glob(f"*_{sample_id}_*_{suffix}.png"))
+    matches = sorted(folder.glob(f"fold_*/{suffix}s/*_{sample_id}_*_{suffix}.png"))
     if len(matches) != 1:
         raise FileNotFoundError(
             f"Expected one {suffix} asset for {sample_id} in {folder}, found {len(matches)}"
@@ -141,12 +146,12 @@ def add_contours(ax: plt.Axes, components) -> None:
 
 def prepare_cases(args: argparse.Namespace) -> list[dict[str, object]]:
     metadata = pd.read_csv(args.metadata_csv)
-    predictions = pd.read_csv(args.predictions_csv)
-    predictions = predictions[
-        (predictions["experiment"] == "luna16_synthetic_2d_top4_minprob0.5_rbf")
-        & (predictions["backbone"] == "efficientnet_v2_s")
-        & (predictions["fold"] == 0)
-    ]
+    predictions = pd.concat(
+        [
+            pd.read_csv(path)
+            for path in sorted(args.run_dir.glob("fold_*/efficientnet_v2_s/test_predictions.csv"))
+        ]
+    )
 
     records = []
     for group, sample_ids in (("benign", BENIGN_CASES), ("malignant", MALIGNANT_CASES)):
@@ -157,8 +162,8 @@ def prepare_cases(args: argparse.Namespace) -> list[dict[str, object]]:
                 raise ValueError(f"Could not uniquely resolve metadata/prediction for {sample_id}")
             row = row.iloc[0]
             pred = pred.iloc[0]
-            image_path = locate_asset(args.assets_dir / "images", sample_id, "image")
-            overlay_path = locate_asset(args.assets_dir / "overlays", sample_id, "overlay")
+            image_path = locate_asset(args.assets_dir, sample_id, "image")
+            overlay_path = locate_asset(args.assets_dir, sample_id, "overlay")
             image = np.asarray(Image.open(image_path).convert("RGB"))
             overlay = np.asarray(Image.open(overlay_path).convert("RGB"))
             relative_mask_path = Path(str(row["nodule_mask_path"]))
@@ -180,11 +185,7 @@ def prepare_cases(args: argparse.Namespace) -> list[dict[str, object]]:
                     "overlay": overlay,
                     "components": components,
                     "scores": scores,
-                    "p_malignant": (
-                        1.0 - float(pred["true_class_score"])
-                        if group == "benign"
-                        else float(pred["true_class_score"])
-                    ),
+                    "p_malignant": float(pred["score"]),
                     "prediction": str(pred["prediction_name"]),
                     "image_path": str(image_path),
                     "overlay_path": str(overlay_path),
