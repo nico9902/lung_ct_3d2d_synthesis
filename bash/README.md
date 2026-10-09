@@ -73,6 +73,7 @@ to pseudo nodules without the empirical prior, so the GT images can be built fir
 | | `train_top4_minprob0.5_rbf_control_ablation.sh` | Both ablations in parallel (`FIXED_DEVICES`, `RANDOM_DEVICES`) |
 | | `gradcam_top4_minprob0.5_rbf.sh` | Grad-CAM of the proposed method |
 | `luna16_2d_baselines/` | `run_mip_efficientnetv2s.sh` | MIP axial / tri-view and central slice (`MODES`) |
+| | `run_detector_top_slice_efficientnetv2s.sh` | Highest-score detector slice, EfficientNetV2-S with the central-slice training setup (`PREPARE_ONLY=1` builds images only) |
 | `luna16_slice_attention_2p5d/` | `run_slice_attention_effnetv2s.sh` | Soft slice attention |
 | `luna16_detection_mil/` | `run_detection_mil_efficientnetv2s.sh` | Detector crop-MIL |
 | | `run_detection_mil_effnetv2s_preprocessed_uint8.sh` | Detector crop-MIL, uint8 crops |

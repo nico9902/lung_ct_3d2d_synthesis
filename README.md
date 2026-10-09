@@ -29,6 +29,7 @@ Pooled out-of-fold performance over the 10 patient-level LUNA16 test folds (`n =
 | Non-adaptive 2D/2.5D | MIP tri-view (EfficientNetV2-S) | 0.6175 | 0.1556 | 0.5008 | 0.5917 |
 | Non-adaptive 2D/2.5D | Central axial slice (EfficientNetV2-S) | 0.6153 | 0.1610 | 0.4668 | 0.6068 |
 | Non-adaptive 2D/2.5D | Soft slice attention (EfficientNet-B0, half-frozen, batch 8) | 0.5482 | 0.0685 | 0.3908 | 0.5691 |
+| Detector/geometric ablation | Detector top-score axial slice (EfficientNetV2-S) | 0.7632 | 0.4183 | 0.6267 | 0.7261 |
 | Detector/geometric ablation | Detector crop-MIL attention | 0.5410 | 0.1861 | 0.5942 | 0.4510 |
 | Detector/geometric ablation | Fixed-control RBF | 0.5878 | 0.1109 | 0.4499 | 0.5791 |
 | Detector/geometric ablation | Random-control RBF | 0.6105 | 0.1877 | 0.5207 | 0.6068 |
