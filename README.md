@@ -87,6 +87,50 @@ outputs/                      checkpoints, predictions and metrics
 
 Each entry can be a symlink to a larger disk; the launchers read these locations through the environment variables shown.
 
+### Rebuilding LUNA16 malignancy labels and folds
+
+The classification score uses LIDC-IDRI reader ratings **only for nodules matched
+to the official LUNA16 references** in `annotations.csv`. A scan without a
+LUNA16 reference receives an operational score of zero. The binary classifier
+excludes scans whose maximum nodule mean is exactly 3. The intermediate
+malignancy CSV can also contain an inherited `target` column from its mapping
+input; the classification-fold generator ignores that column and computes its
+own `target` and `target_name` from the score.
+
+With the LUNA16 `.mhd` subsets, LIDC-IDRI `pylidc` database, and preprocessed
+volumes available locally, run:
+
+```bash
+python -m src.prs.generate_luna16_scan_mapping \
+  --luna-mhd-root data/raw/LUNA16 \
+  --output-csv data/raw/LUNA16/luna16_all_seriesuid_to_lidc_id.csv
+python -m src.prs.generate_luna_malignancy_csv \
+  --match-source pylidc_mhd \
+  --mapping-csv data/raw/LUNA16/luna16_all_seriesuid_to_lidc_id.csv \
+  --annotations-csv data/raw/LUNA16/annotations/annotations.csv \
+  --luna-mhd-root data/raw/LUNA16 \
+  --recover-unmatched-nearest --allow-unmatched \
+  --output-csv data/raw/LUNA16/luna16_mean_nodule_malignancy.csv
+python -m src.det.SCPMNet.prepare_luna16_cv_splits \
+  --preprocessed-root data/processed \
+  --annotations-csv data/raw/LUNA16/annotations/annotations.csv \
+  --output-dir data/processed/cv_splits
+python -m src.prs.generate_luna16_classification_folds \
+  --scores-csv data/raw/LUNA16/luna16_mean_nodule_malignancy.csv \
+  --annotations-csv data/raw/LUNA16/annotations/annotations.csv \
+  --detection-splits-dir data/processed/cv_splits \
+  --output-dir data/processed/cv_splits
+```
+
+The detector fold CSVs contain all 888 scans, including 1,186 positive
+reference-nodule rows and 287 negative-scan rows. The classification fold CSVs
+also retain all 888 scans; the classifier skips the 92 `uncertain` rows. Local
+CSV artifacts predate this documented rebuild sequence: the regenerated
+classification fold labels agree with all 888 stored labels, while the numeric
+score differs for one scan (`LIDC-IDRI-0340`). Rebuilding from the current
+intermediate malignancy CSV gives that scan a score of 3.25 instead of the
+stored 3.4; both scores yield the malignant class.
+
 ## Main experiments
 
 The principal detector-guided experiment uses CPMNetv2 candidates with probability threshold `0.50` and `top-k = 4`, followed by RBF synthesis and EfficientNetV2-S classification. It runs end to end with:
