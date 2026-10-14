@@ -34,10 +34,10 @@ Pooled out-of-fold performance over the 10 patient-level LUNA16 test folds (`n =
 | Detector/geometric ablation | Fixed-control RBF | 0.5878 | 0.1109 | 0.4499 | 0.5791 |
 | Detector/geometric ablation | Random-control RBF | 0.6105 | 0.1877 | 0.5207 | 0.6068 |
 | Volumetric | 3D ResNet18 | 0.5659 | 0.0989 | 0.4870 | 0.5553 |
-| Foundation model | Rad-JEPA-3D resize-32 | 0.5679 | 0.1373 | 0.4868 | 0.5842 |
-| Foundation model | Rad-JEPA-3D sliding mean | 0.5838 | 0.1504 | 0.4914 | 0.5917 |
-| Foundation model | Rad-JEPA-3D sliding max | 0.5765 | 0.1498 | 0.5103 | 0.5829 |
-| Foundation model | Rad-JEPA-3D sliding mean+max | 0.5934 | 0.1615 | 0.5231 | 0.5854 |
+| Foundation model | Rad-JEPA-3D resize-32 | 0.5640 | 0.1248 | 0.4799 | 0.5779 |
+| Foundation model | Rad-JEPA-3D sliding mean | 0.5791 | 0.1482 | 0.4906 | 0.5905 |
+| Foundation model | Rad-JEPA-3D sliding max | 0.5678 | 0.1580 | 0.5155 | 0.5867 |
+| Foundation model | Rad-JEPA-3D sliding mean+max | 0.5876 | 0.1503 | 0.5159 | 0.5804 |
 | Foundation model | 3DINO-ViT partial fine-tuning, mean+max | 0.5169 | 0.0338 | 0.4097 | 0.5402 |
 
 Adaptive RBF was the strongest evaluated configuration. Paired DeLong and exact McNemar tests against the planned comparators are reported in the paper.
@@ -160,4 +160,4 @@ python -m src.luna16_synthetic_2d.explain_gradcam \
   --target-class predicted
 ```
 
-The Rad-JEPA-3D baseline evaluates frozen whole-volume and sliding-window embeddings using linear probes. The 3DINO-ViT baseline partially fine-tunes the final 12 transformer blocks and aggregates overlapping `112^3` windows through mean+max pooling. Neither foundation-model baseline uses detector candidates, nodule coordinates, or masks.
+The Rad-JEPA-3D baseline evaluates frozen whole-volume and sliding-window embeddings using linear probes trained with a 100-epoch maximum and validation-MCC early stopping (patience 30). The 3DINO-ViT baseline partially fine-tunes the final 12 transformer blocks and aggregates overlapping `112^3` windows through mean+max pooling. Neither foundation-model baseline uses detector candidates, nodule coordinates, or masks.
