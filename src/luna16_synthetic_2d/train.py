@@ -118,7 +118,7 @@ def build_loggers(args: argparse.Namespace, output_dir: Path):
         if args.wandb_offline:
             os.environ["WANDB_MODE"] = "offline"
         else:
-            wandb.login(key="5eb716fd87389d240533319f8751488e37103d23")
+            wandb.login(key=os.environ.get("WANDB_API_KEY"))
         run = wandb.init(
             project=args.wandb_project,
             entity=args.wandb_entity,

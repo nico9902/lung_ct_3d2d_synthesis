@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 
 import hydra
@@ -144,7 +145,7 @@ def run(cfg: DictConfig):
     )
     logger = False
     if cfg.use_wandb:
-        wandb.login(key="5eb716fd87389d240533319f8751488e37103d23")
+        wandb.login(key=os.environ.get("WANDB_API_KEY"))
         logger = WandbLogger(
             project=cfg.wandb_project,
             name=cfg.wandb_name or cfg.experiment_name,
