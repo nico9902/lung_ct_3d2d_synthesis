@@ -99,20 +99,55 @@ def _resolve_fold_predictions(predictions_root: Path, fold: int, prediction_name
     )
 
 
+def _load_held_out_predictions(
+    predictions_root: Path,
+    splits_dir: Path,
+    prediction_name: str,
+    num_folds: int = 10,
+) -> pd.DataFrame:
+    """Concatenate the out-of-fold detector predictions of all detector folds.
+
+    Each detector fold file only contains the scans of its own test split, so a
+    classifier fold needs the files of every detector fold to obtain candidates
+    for its training and validation scans. Each scan must be predicted by
+    exactly one detector fold, namely the fold in which it was held out.
+    """
+    required = {"seriesuid", "coordZ", "coordY", "coordX", "radius", "probability"}
+    frames = []
+    for detector_fold in range(num_folds):
+        pred_path = _resolve_fold_predictions(predictions_root, detector_fold, prediction_name)
+        frame = pd.read_csv(pred_path)
+        missing = required - set(frame.columns)
+        if missing:
+            raise ValueError(f"{pred_path} is missing required columns: {sorted(missing)}")
+        frame["seriesuid"] = frame["seriesuid"].astype(str)
+        split_path = splits_dir / f"luna16_classification_fold{detector_fold}.csv"
+        split_frame = pd.read_csv(split_path)
+        held_out = set(split_frame.loc[split_frame["split"].astype(str) == "test", "seriesuid"].astype(str))
+        unexpected = set(frame["seriesuid"]) - held_out
+        if unexpected:
+            raise ValueError(
+                f"Detector fold {detector_fold} has {len(unexpected)} predictions outside its test split ({pred_path})"
+            )
+        frame["detector_fold"] = detector_fold
+        frames.append(frame)
+
+    combined = pd.concat(frames, ignore_index=True)
+    folds_per_scan = combined.groupby("seriesuid")["detector_fold"].nunique()
+    duplicated = folds_per_scan[folds_per_scan != 1]
+    if not duplicated.empty:
+        raise ValueError(f"Scans predicted by multiple detector folds: {duplicated.index.tolist()[:5]}")
+    return combined
+
+
 def _load_candidates(
     predictions_root: Path,
-    fold: int,
+    splits_dir: Path,
     prediction_name: str,
     top_k: int,
     min_probability: float,
 ) -> dict[str, tuple[DetectionCandidate, ...]]:
-    pred_path = _resolve_fold_predictions(predictions_root, fold, prediction_name)
-    df = pd.read_csv(pred_path)
-    required = {"seriesuid", "coordZ", "coordY", "coordX", "radius", "probability"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"{pred_path} is missing required columns: {sorted(missing)}")
-
+    df = _load_held_out_predictions(predictions_root, splits_dir, prediction_name)
     df = df[df["probability"].astype(float) >= float(min_probability)].copy()
     df = df.sort_values(["seriesuid", "probability"], ascending=[True, False])
     by_patient: dict[str, tuple[DetectionCandidate, ...]] = {}
@@ -155,7 +190,7 @@ def _read_samples(
     class_to_idx = {name: idx for idx, name in enumerate(class_names)}
     candidates_by_patient = _load_candidates(
         predictions_root=predictions_root,
-        fold=fold,
+        splits_dir=split_csv.parent,
         prediction_name=prediction_name,
         top_k=top_k,
         min_probability=min_probability,
@@ -184,6 +219,14 @@ def _read_samples(
         )
     if not samples:
         raise RuntimeError(f"No samples found for split '{split}' in {split_csv}")
+    non_empty = sum(1 for sample in samples if sample.candidates)
+    print(f"Split '{split}' (fold {fold}): {non_empty}/{len(samples)} bags with at least one detector candidate")
+    # Guard against silently training on empty bags (most scans have a candidate above threshold).
+    if non_empty < 0.5 * len(samples):
+        raise RuntimeError(
+            f"Only {non_empty}/{len(samples)} '{split}' bags have detector candidates; "
+            "check --predictions-root and --splits-dir"
+        )
     return samples
 
 
