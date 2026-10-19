@@ -145,6 +145,14 @@ bash bash/luna16_synthetic_2d/train_top4_minprob0.5_rbf.sh
 
 Every baseline in the results table has its own launcher; [`bash/README.md`](bash/README.md) maps scripts to experiments and lists the environment variables used to point them at local data and GPUs.
 
+The soft slice attention baseline reported in the paper uses EfficientNet-B0 with approximately half of the backbone frozen (batch size 8, bf16 mixed precision, 100 epochs). The launcher defaults to an unfrozen EfficientNetV2-S, so the reported configuration is obtained with:
+
+```bash
+BACKBONE=efficientnet_b0 FREEZE_HALF_BACKBONE=1 CACHE_WRITE_FIRST_EPOCH_ONLY=1 \
+OUTPUT_DIR=outputs/luna16_slice_attention_2p5d_effnetb0_half_frozen_v100_bs2 \
+bash bash/luna16_slice_attention_2p5d/run_slice_attention_effnetv2s.sh
+```
+
 Grad-CAM explanations can be generated with `bash bash/luna16_synthetic_2d/gradcam_top4_minprob0.5_rbf.sh`, or directly with:
 
 ```bash
