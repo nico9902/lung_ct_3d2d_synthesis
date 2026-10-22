@@ -16,3 +16,10 @@ torch==2.10.0
 torchvision==0.25.0
 wandb==0.24.0
 
+# CT preprocessing, NIfTI synthesis and LIDC reader annotations
+SimpleITK==2.5.3
+lungmask==0.2.20
+nibabel==5.4.0
+pylidc==0.2.3
+scikit-image==0.25.2
+tqdm>=4.66

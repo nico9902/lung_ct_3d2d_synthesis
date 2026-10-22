@@ -34,6 +34,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.luna16_3dino_3d.model import (  # noqa: E402
     EMBED_DIM,
+    DEFAULT_3DINO_CODE_DIR,
     apply_partial_freeze,
     build_backbone,
     load_checkpoint,
@@ -60,13 +61,14 @@ class Dino3DPartialFinetuneClassifier(pl.LightningModule):
         warmup_epochs: int = 5,
         max_epochs: int = 50,
         micro_batch_windows: int = 32,
+        code_dir: str = str(DEFAULT_3DINO_CODE_DIR),
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
 
-        self.backbone = build_backbone()
+        self.backbone = build_backbone(Path(code_dir))
         if checkpoint_path:
-            load_checkpoint(self.backbone, checkpoint_path)
+            load_checkpoint(self.backbone, checkpoint_path, Path(code_dir))
         self.freeze_report = apply_partial_freeze(self.backbone)
         print_freeze_report(self.freeze_report)
 

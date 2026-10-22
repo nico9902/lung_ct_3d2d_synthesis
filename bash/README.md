@@ -32,14 +32,15 @@ The proposed method (adaptive RBF, top-4, p >= 0.5, EfficientNetV2-S):
 bash bash/preprocessing/luna16_preprocessing.sh           # 1. resample, crop to lungs, write NIfTI + labels
 bash bash/preprocessing/reorganize_luna16_subsets.sh      # 2. group scans by LUNA16 subset
 bash bash/cpmnetv2/train_10fold.sh                        # 3. train the detector on every fold
-bash bash/luna16_synthetic_2d/generate_top4_minprob0.5_rbf.sh  # 4. build the synthetic 2D images
-bash bash/luna16_synthetic_2d/train_top4_minprob0.5_rbf.sh     # 5. train the 2D classifiers
-bash bash/luna16_synthetic_2d/gradcam_top4_minprob0.5_rbf.sh   # 6. Grad-CAM explanations
+bash bash/cpmnetv2/export_synthesis_predictions.sh        # 4. export normalized candidates
+bash bash/luna16_synthetic_2d/generate_top4_minprob0.5_rbf.sh  # 5. build the synthetic 2D images
+bash bash/luna16_synthetic_2d/train_top4_minprob0.5_rbf.sh     # 6. train the 2D classifiers
+bash bash/luna16_synthetic_2d/gradcam_top4_minprob0.5_rbf.sh   # 7. Grad-CAM explanations
 ```
 
-Step 4 reads the out-of-fold detector predictions of step 3 from
+Step 5 reads the out-of-fold detector predictions exported in step 4 from
 `DETECTOR_PREDICTIONS` (one `*fold<k>/predictions/test_predictions.csv` per fold).
-When a scan has no detector candidate, step 4 places pseudo nodules sampled from
+When a scan has no detector candidate, step 5 places pseudo nodules sampled from
 an empirical distribution
 (`outputs/luna16_saliency_control_point_distribution/empirical_nodule_distribution_from_control_points.npz`),
 built beforehand from the control points of the ground-truth-guided synthetic
@@ -61,6 +62,7 @@ to pseudo nodules without the empirical prior, so the GT images can be built fir
 | | `reorganize_luna16_subsets.sh` | Subset folder layout |
 | `cpmnetv2/` | `train_fold.sh` | Detector on one split (used by `train_10fold.sh`) |
 | | `train_10fold.sh` | CPMNetv2 detector, 10 folds |
+| | `export_synthesis_predictions.sh` | Export test boxes to synthesis radii and pooled OOF candidates; `DETECTOR_OUTPUT_DIR` selects the input root |
 | `luna16_synthetic_2d/` | `generate_synthetic_images.sh` | Generic generator (`SURFACE_METHOD`, `CONTROL_POINT_MODE`, `TOP_K`, `MIN_PROBABILITY`) |
 | | `generate_gt_synthetic_images.sh` | Ground-truth-guided images (input of the nodule distribution) |
 | | `build_nodule_position_distribution.sh` | Empirical nodule distribution for pseudo nodules in detector-negative scans |

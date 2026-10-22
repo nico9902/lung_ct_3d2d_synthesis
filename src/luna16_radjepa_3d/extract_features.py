@@ -6,11 +6,10 @@ float32, HU-windowed and rescaled to ``[0, 1]`` (the exact preprocessing
 convention already established by that project's
 ``scripts/prepare_radjepa_volumes.py`` / ``prepare_radjepa_sliding_volume.py``).
 
-This script must be run with the sibling project's Python interpreter
-(``/home/domenico/lung-jepa-world-model/.venv/bin/python3``), which has the
+Run this script with a separate Python interpreter (``$RADJEPA_PYTHON``)
+that provides the
 ``mamba_ssm``/``causal_conv1d`` CUDA extensions the encoder depends on; this
-repo's own ``myenv`` intentionally keeps a newer, incompatible ``torch`` and
-is never modified for this baseline (see ``README.md``).
+main environment uses a newer PyTorch. See ``FOUNDATION_MODELS.md`` for setup.
 
 For each patient (seriesuid) this computes, from the frozen encoder's
 mean-pooled token embedding (``encoder(x, indices=None).mean(dim=1)`` ->
@@ -50,8 +49,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.luna16_foundation_common import find_raw_ct_path, load_patient_table  # noqa: E402
 
-DEFAULT_RADJEPA_CODE_DIR = Path("/home/domenico/lung-jepa-world-model/external/RadJepa")
-DEFAULT_HF_MODEL_DIR = Path("/home/domenico/lung-jepa-world-model/external/Rad-Jepa-3D-hf")
+DEFAULT_RADJEPA_CODE_DIR = REPO_ROOT / "external/RadJepa"
+DEFAULT_HF_MODEL_DIR = REPO_ROOT / "external/Rad-Jepa-3D-hf"
 WINDOW_DEPTH = 32
 WINDOW_SIZE_HW = 256
 

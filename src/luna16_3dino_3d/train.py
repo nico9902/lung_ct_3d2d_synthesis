@@ -26,7 +26,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.luna16_3dino_3d.datamodule import Luna163DinoDataModule  # noqa: E402
 from src.luna16_3dino_3d.lightning_model import Dino3DPartialFinetuneClassifier  # noqa: E402
-from src.luna16_3dino_3d.model import NATIVE_INPUT_SIZE  # noqa: E402
+from src.luna16_3dino_3d.model import NATIVE_INPUT_SIZE, DEFAULT_3DINO_CODE_DIR  # noqa: E402
 
 
 def git_commit() -> str | None:
@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", default="data/processed")
     parser.add_argument("--splits-dir", default="data/processed/cv_splits")
     parser.add_argument("--output-dir", default="outputs/luna16_3dino_3d")
+    parser.add_argument("--code-dir", default=str(DEFAULT_3DINO_CODE_DIR), help="Official 3DINO source checkout (or DINO3D_CODE_DIR).")
     parser.add_argument("--fold", type=int, required=True)
     parser.add_argument("--checkpoint-path", default=None, help="Path to the official 3DINO-ViT teacher_checkpoint (.pth).")
 
@@ -171,6 +172,7 @@ def main() -> None:
 
     model = Dino3DPartialFinetuneClassifier(
         checkpoint_path=args.checkpoint_path,
+        code_dir=args.code_dir,
         backbone_lr=args.backbone_lr,
         head_lr=args.head_lr,
         weight_decay=args.weight_decay,

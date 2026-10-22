@@ -1,92 +1,99 @@
-# LUNA16 Synthetic 2D Classifiers
+# Adaptive 2D synthesis and classification
 
-Train PyTorch Lightning torchvision classifiers on SCPMNet TPS synthetic images.
+CPMNetv2 out-of-fold candidates guide an RBF or Shepard surface through each
+processed CT. The resulting three-channel image is classified with torchvision
+backbones. The paper's primary configuration is RBF, top-4 candidates with
+probability >= 0.50, and EfficientNetV2-S.
 
-The dataset is driven by:
+## Inputs and generation
 
-- `data/LUNA16_preprocessed/cv_splits/luna16_classification_fold{fold}.csv`
+Run from the repository root after installing `requirements.txt`. Preprocessed
+CTs and masks live in `data/processed`; patient classification CSVs live in
+`data/processed/cv_splits/luna16_classification_fold{fold}.csv`. CSVs provide
+`seriesuid`, `split`, `target`, and `target_name`; uncertain cases are excluded.
+See the [main README](../../README.md) for rebuilding labels and folds.
 
-The classification fold CSV provides scan IDs, `split`, `target`, and
-`target_name`. Synthetic image paths are derived from each `seriesuid`; the
-loader supports saliency GT outputs such as
-`outputs/luna16_saliency_synthetic_gt/{seriesuid}/surface_grid_float_{seriesuid}.npy`
-and TPS outputs such as
-`outputs/scpmnet_luna16_10fold_tps_images/fold_{fold}/{seriesuid}_tps_top5.npy`.
-Rows with `target_name=uncertain` are skipped when training with the default
-binary classes `benign malignant`.
-
-## Files
-
-- `dataset.py`: one fold-CSV-driven `SyntheticLuna16Dataset`
-- `datamodule.py`: Lightning `DataModule` and transforms
-- `models.py`: torchvision backbone factory
-- `lightning_model.py`: Lightning classifier
-- `train.py`: CLI entry point
-
-## Examples
-
-Train fold 0:
+After detector training, export its box predictions before synthesizing images:
 
 ```bash
-python3 -m src.luna16_synthetic_2d.train \
-  --fold 0 \
-  --backbone densenet121 \
-  --image-size 256 384 \
-  --epochs 50 \
-  --batch-size 16 \
-  --precision 16-mixed
+bash bash/cpmnetv2/export_synthesis_predictions.sh
+bash bash/luna16_synthetic_2d/generate_top4_minprob0.5_rbf.sh
 ```
 
-Freeze backbone layers:
+`DETECTOR_PREDICTIONS` selects the exported candidate root, `DATA_ROOT` the
+processed volumes, and `SYNTHETIC_ROOT` the output parent. The default RBF image
+root is `data/synthetic_2d/luna16_saliency_synthetic_detector_cpmnetv2_bf16_top4_minprob0.50_rbf`.
+The classifier uses `surface_<seriesuid>.png` in each scan directory.
+`surface_grid_float_<seriesuid>.npy` stores sampling depths for explanation
+analysis; retain the PNG files to avoid the loader's legacy grid fallback.
+Legacy TPS filename support remains for previously generated datasets.
+
+## Training and evaluation
+
+Run one fold of the primary experiment:
 
 ```bash
-python3 -m src.luna16_synthetic_2d.train --fold 0 --backbone densenet121 --freeze-half-backbone
-python3 -m src.luna16_synthetic_2d.train --fold 0 --backbone resnet50 --freeze-first-layers 20
-python3 -m src.luna16_synthetic_2d.train --fold 0 --backbone efficientnet_b0 --unfreeze-last-layers 12
-python3 -m src.luna16_synthetic_2d.train --fold 0 --backbone efficientnet_b0 --freeze-backbone
+FOLDS=0 BACKBONES=efficientnet_v2_s bash bash/luna16_synthetic_2d/train_top4_minprob0.5_rbf.sh
 ```
 
-`--freeze-half-backbone` freezes from the first backbone parameters until about
-50% of the backbone scalar parameter count is frozen; the replaced classifier
-head remains trainable.
+Omit `FOLDS=0` to run all ten folds. `BACKBONES` can be a space-separated list.
+The [launcher guide](../../bash/README.md) lists Shepard, geometric controls,
+MIP, detector-selected slice and volumetric experiments.
 
-Train an explicit split CSV:
+For direct CLI use, specify both data locations:
 
 ```bash
-python3 -m src.luna16_synthetic_2d.train \
-  --synthetic-images-dir outputs/luna16_saliency_synthetic_gt \
-  --split-csv data/LUNA16_preprocessed/cv_splits/luna16_classification_fold0.csv \
-  --backbone resnet50
+python -m src.luna16_synthetic_2d.train \
+  --synthetic-images-dir data/synthetic_2d/luna16_saliency_synthetic_detector_cpmnetv2_bf16_top4_minprob0.50_rbf \
+  --splits-dir data/processed/cv_splits \
+  --fold 0 --backbone efficientnet_v2_s --image-size 256 384
 ```
 
-Run the default backbone set on one synthetic image set (see `bash/README.md`
-for the per-experiment wrappers):
+Add `--eval-only /path/to/best.ckpt` to evaluate a saved checkpoint with the
+same input configuration. Freezing is controlled by `--freeze-backbone`,
+`--freeze-half-backbone`, `--freeze-first-layers N`, or `--unfreeze-last-layers N`.
+The launchers expose corresponding uppercase environment variables.
+
+`train_top4_minprob0.5_rbf.sh` writes checkpoints, run configuration and test
+predictions under `outputs/luna16_synthetic_2d_cpmnetv2_bf16_top4_minprob0.50_rbf_v100`;
+`OUTPUT_DIR` overrides this root. It also aggregates fold predictions.
+
+## Explanations and statistical comparisons
 
 ```bash
-EXPERIMENT_NAME=cpmnetv2_bf16_top4_minprob0.50_rbf bash bash/luna16_synthetic_2d/train_backbones.sh
+bash bash/luna16_synthetic_2d/gradcam_top4_minprob0.5_rbf.sh
+python -m src.luna16_synthetic_2d.gradcam_nodule_energy --help
+python -m src.luna16_synthetic_2d.manuscript_paired_comparisons --help
 ```
 
-Run a subset:
+The energy analysis measures the fraction of Grad-CAM energy within projected
+and surface-sampled reference-nodule masks. It needs trained checkpoints,
+synthetic images and saved sampling surfaces, processed nodule masks, label
+CSV and the ten classification splits. Override `--run-root`,
+`--synthetic-images-dir`, `--processed-root`, `--labels-csv`, and `--splits-dir`
+as needed. Outputs go to `outputs/luna16_synthetic_2d_gradcam_nodule_energy`.
+
+Paired comparisons compute DeLong AUC and exact McNemar tests, followed by
+Benjamini-Hochberg adjustment across the chosen comparator family. Without
+`--config`, the script uses the original local experiment directory names.
+For a new checkout, provide a JSON manifest with paths relative to that file:
+
+```json
+{
+  "reference": {"path": "outputs/rbf/all_test_predictions.csv", "backbone": "efficientnet_v2_s"},
+  "comparators": [
+    {"name": "Adaptive Shepard", "path": "outputs/shepard/all_test_predictions.csv", "backbone": "efficientnet_v2_s"}
+  ]
+}
+```
 
 ```bash
-EXPERIMENT_NAME=cpmnetv2_bf16_top4_minprob0.50_rbf FOLDS="0 1" BACKBONES="resnet18 densenet121" \
-  bash bash/luna16_synthetic_2d/train_backbones.sh
+python -m src.luna16_synthetic_2d.manuscript_paired_comparisons \
+  --config comparisons.json --output outputs/manuscript_paired_comparisons.csv
 ```
 
-The launcher also accepts `FREEZE_BACKBONE=1`, `FREEZE_HALF_BACKBONE=1`,
-`FREEZE_FIRST_LAYERS=<N>`, or `UNFREEZE_LAST_LAYERS=<N>`.
-
-Outputs are written to `outputs/luna16_synthetic_2d/fold_<fold>/<backbone>/`:
-
-- `checkpoints/*.ckpt`: best and last Lightning checkpoints
-- `version_*/metrics.csv`: Lightning CSV logs
-- `config.json`: run configuration
-
-Evaluate an existing checkpoint:
-
-```bash
-python3 -m src.luna16_synthetic_2d.train \
-  --fold 0 \
-  --backbone densenet121 \
-  --eval-only outputs/luna16_synthetic_2d/fold_0/densenet121/checkpoints/last.ckpt
-```
+Each source can be a pooled CSV or a directory of fold prediction files.
+Required columns are `sample_id` (or `seriesuid`), `fold`, `label`, `prediction`,
+and `score`; `backbone` is needed only when filtering by backbone. Each source
+must contain the same 796 patients across ten test folds. Include the complete
+planned comparator family when reproducing adjusted p-values.

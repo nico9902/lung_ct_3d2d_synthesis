@@ -43,13 +43,14 @@ rather than reimplemented, per the official implementation:
 from __future__ import annotations
 
 import itertools
+import os
 import sys
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 
-DEFAULT_3DINO_CODE_DIR = Path("/home/domenico/lung_ct_3d2d_synthesis/external/3DINO")
+DEFAULT_3DINO_CODE_DIR = Path(os.environ.get("DINO3D_CODE_DIR", Path(__file__).resolve().parents[2] / "external/3DINO"))
 NATIVE_INPUT_SIZE = 112  # dinov2/configs/train/vit3d_highres.yaml: crops.global_crops_size
 PATCH_SIZE = 16
 EMBED_DIM = 1024
@@ -58,7 +59,10 @@ BLOCK_CHUNKS = 4  # student.block_chunks in dinov2/configs/ssl3d_default_config.
 
 
 def add_3dino_to_path(code_dir: Path = DEFAULT_3DINO_CODE_DIR) -> None:
-    path_str = str(Path(code_dir).resolve())
+    code_dir = Path(code_dir).expanduser().resolve()
+    if not (code_dir / "dinov2/models/vision_transformer.py").is_file():
+        raise FileNotFoundError(f"3DINO source not found at {code_dir}; set DINO3D_CODE_DIR or --code-dir to the official checkout.")
+    path_str = str(code_dir)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 

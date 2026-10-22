@@ -60,13 +60,18 @@ Large datasets, model checkpoints, generated outputs, experiment reports, and ma
 ## Installation
 
 ```bash
-python -m venv .venv
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-GPU-enabled PyTorch and detector-specific dependencies may need to be adapted to the local CUDA installation.
+Use Python 3.10 (the local validation environment). `requirements.txt` includes
+CT preprocessing, NIfTI and LIDC annotation dependencies. GPU-enabled PyTorch
+may need to be adapted to the local CUDA installation. Configure `pylidc`
+with the local LIDC-IDRI DICOM location before rebuilding reader annotations.
+See [foundation-model setup](FOUNDATION_MODELS.md) for external code, teacher
+weights and the separate Rad-JEPA extraction environment.
 
 ## Data
 
@@ -137,9 +142,17 @@ The principal detector-guided experiment uses CPMNetv2 candidates with probabili
 bash bash/preprocessing/luna16_preprocessing.sh
 bash bash/preprocessing/reorganize_luna16_subsets.sh
 bash bash/cpmnetv2/train_10fold.sh
+bash bash/cpmnetv2/export_synthesis_predictions.sh
 bash bash/luna16_synthetic_2d/generate_top4_minprob0.5_rbf.sh
 bash bash/luna16_synthetic_2d/train_top4_minprob0.5_rbf.sh
 ```
+
+The export step converts `test_predictions_test.csv` box dimensions to
+`test_predictions.csv` radii (`max(w, h, d) / 2`), retaining voxel coordinates
+on the processed CT grid and every candidate score. It checks that predictions
+belong to the detector test fold. `DETECTOR_OUTPUT_DIR` selects the training
+output root and `DETECTOR_PREDICTIONS` the normalized output root. A pooled
+candidate CSV is also written for the frozen 3DINO detector-crop probe.
 
 Every baseline in the results table has its own launcher; [`bash/README.md`](bash/README.md) maps scripts to experiments and lists the environment variables used to point them at local data and GPUs.
 
@@ -167,3 +180,11 @@ python -m src.luna16_synthetic_2d.explain_gradcam \
 ```
 
 The Rad-JEPA-3D baseline evaluates frozen whole-volume and sliding-window embeddings using linear probes trained with a 100-epoch maximum and validation-MCC early stopping (patience 30). The 3DINO-ViT baseline partially fine-tunes the final 12 transformer blocks and aggregates overlapping `112^3` windows through mean+max pooling. Neither foundation-model baseline uses detector candidates, nodule coordinates, or masks.
+
+## Additional reproducibility tools
+
+- [Paired DeLong/McNemar comparisons and Grad-CAM nodule-energy analysis](src/luna16_synthetic_2d/README.md#explanations-and-statistical-comparisons): commands, required inputs, and configurable prediction manifests.
+- [Frozen 3DINO probes](src/luna16_3dino_3d/README_frozen_probe.md): whole-volume and detector-crop feature extraction, head training and pooled evaluation. These are additional analyses; the results table above reports the partial-fine-tuning experiment.
+
+These tools consume local predictions, masks and checkpoints; generated
+artifacts and patient data are not included in Git.

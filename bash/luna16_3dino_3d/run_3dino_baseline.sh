@@ -61,6 +61,7 @@ fi
       --output-dir "${OUTPUT_ROOT}" \
       --windows-cache-dir "${WINDOWS_CACHE_DIR}" \
       --checkpoint-path "${CHECKPOINT_PATH}" \
+      --code-dir "${DINO3D_CODE_DIR:-${PROJECT_DIR}/external/3DINO}" \
       --fold "${FOLD}" \
       --window-size "${WINDOW_SIZE}" \
       --stride "${STRIDE}" \
