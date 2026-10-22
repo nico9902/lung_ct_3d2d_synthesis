@@ -75,8 +75,6 @@ to pseudo nodules without the empirical prior, so the GT images can be built fir
 | `luna16_2d_baselines/` | `run_mip_efficientnetv2s.sh` | MIP axial / tri-view and central slice (`MODES`) |
 | | `run_detector_top_slice_efficientnetv2s.sh` | Highest-score detector slice, EfficientNetV2-S with the central-slice training setup (`PREPARE_ONLY=1` builds images only) |
 | `luna16_slice_attention_2p5d/` | `run_slice_attention_effnetv2s.sh` | Soft slice attention; the paper configuration needs `BACKBONE=efficientnet_b0 FREEZE_HALF_BACKBONE=1 CACHE_WRITE_FIRST_EPOCH_ONLY=1` (see the main README) |
-| `luna16_detection_mil/` | `run_detection_mil_efficientnetv2s.sh` | Detector crop-MIL |
-| | `run_detection_mil_effnetv2s_preprocessed_uint8.sh` | Detector crop-MIL, uint8 crops |
 | `luna16_volume_3d/` | `run_resnet18_10fold.sh` | 3D ResNet18 |
 | `luna16_radjepa_3d/` | `run_radjepa_baseline.sh` | Rad-JEPA-3D linear probes (needs `RADJEPA_PYTHON`) |
 | `luna16_3dino_3d/` | `run_3dino_baseline.sh` | 3DINO-ViT partial fine-tuning (needs `CHECKPOINT_PATH`) |

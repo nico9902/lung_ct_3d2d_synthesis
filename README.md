@@ -30,7 +30,6 @@ Pooled out-of-fold performance over the 10 patient-level LUNA16 test folds (`n =
 | Non-adaptive 2D/2.5D | Central axial slice (EfficientNetV2-S) | 0.6153 | 0.1610 | 0.4668 | 0.6068 |
 | Non-adaptive 2D/2.5D | Soft slice attention (EfficientNet-B0, half-frozen, batch 8) | 0.5482 | 0.0685 | 0.3908 | 0.5691 |
 | Detector/geometric ablation | Detector top-score axial slice (EfficientNetV2-S) | 0.7632 | 0.4183 | 0.6267 | 0.7261 |
-| Detector/geometric ablation | Detector crop-MIL attention | 0.5410 | 0.1861 | 0.5942 | 0.4510 |
 | Detector/geometric ablation | Fixed-control RBF | 0.5878 | 0.1109 | 0.4499 | 0.5791 |
 | Detector/geometric ablation | Random-control RBF | 0.6105 | 0.1877 | 0.5207 | 0.6068 |
 | Volumetric | 3D ResNet18 | 0.5659 | 0.0989 | 0.4870 | 0.5553 |
@@ -50,7 +49,6 @@ assets/                       Figures displayed in this README
 src/det/CPMNetv2/             3D nodule detector
 src/luna16_synthetic_2d/      Adaptive synthesis and 2D classifiers
 src/luna16_slice_attention_2p5d/  Full-volume soft slice-attention baseline
-src/luna16_detection_mil/     Detector-crop MIL baseline
 src/luna16_volume_3d/         3D ResNet18 volumetric baseline
 src/luna16_radjepa_3d/        Frozen Rad-JEPA-3D linear-probe baseline
 src/luna16_3dino_3d/          Partially fine-tuned 3DINO-ViT baseline
